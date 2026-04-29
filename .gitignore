@@ -36,9 +36,10 @@ yarn-error.log*
 # vercel
 .vercel
 
-# turbo
-.turbo
-
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# tooling artifacts (local-only test scripts and reference assets)
+/scripts/
+/.stitch/
