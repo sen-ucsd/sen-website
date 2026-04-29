@@ -130,14 +130,14 @@ export function Hero() {
                   </motion.p>
 
                   <motion.div
-                    className="mt-12 flex flex-col sm:flex-row items-start sm:items-center gap-5 sm:gap-7"
+                    className="mt-12 flex flex-row items-center gap-3 sm:gap-7 flex-wrap"
                     initial={{ opacity: 0, y: 12 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.7, delay: 1.85 }}
                   >
                     <motion.a
                       href="/apply"
-                      className="rounded-full px-8 py-4 font-display text-[15px] tracking-wide"
+                      className="rounded-full px-5 sm:px-8 py-3 sm:py-4 font-display text-[13px] sm:text-[15px] tracking-wide whitespace-nowrap"
                       style={{ background: "#D4A843", color: "#050816", fontWeight: 500 }}
                       whileHover={{
                         scale: 1.04,
@@ -150,7 +150,7 @@ export function Hero() {
                     <button
                       type="button"
                       onClick={() => setExplorerOpen(true)}
-                      className="font-display text-[15px] tracking-wide group inline-flex items-center gap-3"
+                      className="font-display text-[13px] sm:text-[15px] tracking-wide group inline-flex items-center gap-2 sm:gap-3 whitespace-nowrap"
                       style={{ color: "rgba(240, 236, 228, 0.62)" }}
                     >
                       <span className="border-b border-transparent group-hover:border-[rgba(232,201,122,0.5)] transition-colors duration-300">
@@ -174,11 +174,13 @@ export function Hero() {
             </div>
           </div>
 
-          {/* Floating map-explore CTA — bigger, animated, hard to miss */}
+          {/* Floating map-explore CTA — only on desktop where there's room. On mobile,
+              the inline "Explore the Network" link does the same job without colliding
+              with the stacked logo emblem. */}
           <motion.button
             type="button"
             onClick={() => setExplorerOpen(true)}
-            className="pointer-events-auto absolute bottom-6 right-6 md:bottom-12 md:right-12 inline-flex items-center gap-3 rounded-full pl-5 pr-3 py-2.5 backdrop-blur-md group"
+            className="hidden md:inline-flex pointer-events-auto absolute bottom-12 right-12 items-center gap-3 rounded-full pl-5 pr-3 py-2.5 backdrop-blur-md group"
             style={{
               background: "rgba(212, 168, 67, 0.95)",
               color: "#050816",

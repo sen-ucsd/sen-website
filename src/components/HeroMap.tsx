@@ -154,7 +154,7 @@ export function HeroMap() {
             vectorEffect="non-scaling-stroke"
           />
 
-          {/* Network lines — Delaunay adjacency: every chapter connected to its actual neighbors */}
+          {/* Network lines — Delaunay adjacency. Continuous strokes, no dashes. */}
           <g>
             {lines.map((l, i) => {
               const stageReady =
@@ -169,13 +169,11 @@ export function HeroMap() {
                   stroke="#E8C97A"
                   strokeWidth={0.9}
                   vectorEffect="non-scaling-stroke"
-                  initial={{ pathLength: 0, opacity: 0 }}
-                  animate={{
-                    pathLength: stageReady ? 1 : 0,
-                    opacity: stageReady ? 0.75 : 0,
-                  }}
+                  strokeLinecap="round"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: stageReady ? 0.7 : 0 }}
                   transition={{
-                    duration: 0.9,
+                    duration: 0.6,
                     delay: stageReady ? (i % 10) * 0.06 : 0,
                     ease: "easeOut",
                   }}
