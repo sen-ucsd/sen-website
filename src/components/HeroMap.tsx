@@ -182,9 +182,9 @@ export function HeroMap() {
             })}
           </g>
 
-          {/* Chapter dots */}
+          {/* Chapter dots — appear in sync with the lines that connect them */}
           <g>
-            {projected.map((c) => {
+            {projected.map((c, i) => {
               const isFounding = c.status === "founding";
               const isUS = isInUS(c);
               const visible =
@@ -199,8 +199,10 @@ export function HeroMap() {
                   initial={{ opacity: isFounding ? 1 : 0 }}
                   animate={{ opacity: visible ? 1 : 0 }}
                   transition={{
-                    duration: 0.7,
-                    delay: visible && !isFounding ? (isUS ? 0.6 : 1.4) + Math.random() * 0.6 : 0,
+                    duration: 0.6,
+                    delay:
+                      visible && !isFounding ? (i % 10) * 0.06 : 0,
+                    ease: "easeOut",
                   }}
                 >
                   {/* Halo */}

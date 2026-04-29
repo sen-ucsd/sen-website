@@ -1,0 +1,11 @@
+.git
+.github
+node_modules
+.next
+.stitch
+scripts
+supabase/migrations
+design.md
+stitch-prompt.md
+AGENTS.md
+.claude
