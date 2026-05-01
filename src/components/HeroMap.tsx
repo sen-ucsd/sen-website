@@ -21,11 +21,19 @@ import {
  *   3.8s  Global dots ignite across continents with more lines
  *   5.5s+ Ambient state — dots pulse softly, occasional new line draws
  */
+// Equirectangular projection puts the world's geographic center (longitude 0)
+// at SVG x = 500. We want America (~longitude -100) at the visible center,
+// so we shift the camera right by ~278 SVG units when it lands in world view.
+const AMERICA_OFFSET_X = 278;
+
+// Tile the world content at -W, 0, +W so panning never exposes empty edges
+// and the loop wraps seamlessly: the +W copy becomes visible on the right
+// just as the original copy exits on the left, and they're identical.
+const TILE_OFFSETS = [-WORLD_SVG_W, 0, WORLD_SVG_W];
+
 export function HeroMap() {
   const reduce = useReducedMotion();
   const [stage, setStage] = useState<"sd" | "us" | "world">("sd");
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [panRange, setPanRange] = useState(0);
 
   useEffect(() => {
     if (reduce) {
@@ -39,32 +47,6 @@ export function HeroMap() {
       clearTimeout(t2);
     };
   }, [reduce]);
-
-  // Compute how far we can pan the inner <g> horizontally without exposing
-  // empty space past the SVG's intrinsic 1000-wide bounds. Because the SVG
-  // is rendered with `xMidYMid slice`, on viewports narrower than 2:1 (which
-  // is most desktop and all portrait phones) some of the world is cropped
-  // on each side; that cropped width is exactly how far we can safely pan.
-  useEffect(() => {
-    function update() {
-      const el = containerRef.current;
-      if (!el) return;
-      const w = el.clientWidth;
-      const h = el.clientHeight;
-      if (!w || !h) return;
-      const aspectSvg = WORLD_SVG_W / WORLD_SVG_H;
-      const aspectEl = w / h;
-      if (aspectEl < aspectSvg) {
-        const visibleSvgWidth = WORLD_SVG_H * aspectEl;
-        setPanRange((WORLD_SVG_W - visibleSvgWidth) / 2);
-      } else {
-        setPanRange(0);
-      }
-    }
-    update();
-    window.addEventListener("resize", update);
-    return () => window.removeEventListener("resize", update);
-  }, []);
 
   // Project chapters into the same viewBox as the world SVG path
   const projected = useMemo(
@@ -120,10 +102,10 @@ export function HeroMap() {
   const sdTx = WORLD_SVG_W / 2 - sd.px * sdScale;
   const sdTy = WORLD_SVG_H / 2 - sd.py * sdScale;
 
-  const panActive = stage === "world" && !reduce && panRange > 0;
+  const panActive = stage === "world" && !reduce;
 
   return (
-    <div ref={containerRef} className="absolute inset-0 z-0 overflow-hidden">
+    <div className="absolute inset-0 z-0 overflow-hidden">
       {/* Soft gold glow behind map */}
       <div
         aria-hidden
@@ -168,130 +150,133 @@ export function HeroMap() {
             transform:
               stage === "sd"
                 ? `translate(${sdTx}px,${sdTy}px) scale(${sdScale})`
-                : "translate(0px,0px) scale(1)",
+                : `translate(${AMERICA_OFFSET_X}px,0px) scale(1)`,
           }}
           transition={{ duration: 2.4, ease: [0.16, 1, 0.3, 1] }}
         >
-          {/* Slow ambient horizontal pan once the camera has landed on the world.
-              The keyframe sequence sweeps left, then right, then back through 0,
-              so the cropped edges of the map are revealed in turn. With repeat
-              reverse, the world keeps oscillating gently. */}
+          {/* Continuous eastward world tour. The map is tiled three times
+              horizontally, so animating the inner group from x=0 to x=-W
+              wraps seamlessly: the moment the original copy exits left, the
+              +W tile (an identical copy) is in the same screen position. */}
           <motion.g
             animate={{
-              x: panActive ? [0, -panRange, panRange] : 0,
+              x: panActive ? -WORLD_SVG_W : 0,
             }}
             transition={{
               x: panActive
                 ? {
-                    duration: 70,
+                    duration: 30,
                     repeat: Infinity,
-                    repeatType: "reverse",
-                    ease: "easeInOut",
-                    delay: 1.8,
+                    ease: "linear",
+                    delay: 0.2,
                   }
                 : { duration: 0 },
             }}
           >
-          {/* World map outline */}
-          <motion.path
-            d={WORLD_SVG_PATH}
-            fill="rgba(212,168,67,0.04)"
-            stroke="rgba(212,168,67,0.18)"
-            strokeWidth={0.5}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: stage === "sd" ? 0.35 : 0.7 }}
-            transition={{ duration: 2 }}
-            vectorEffect="non-scaling-stroke"
-          />
+          {TILE_OFFSETS.map((tx) => (
+            <g key={tx} transform={`translate(${tx},0)`}>
+              {/* World map outline */}
+              <motion.path
+                d={WORLD_SVG_PATH}
+                fill="rgba(212,168,67,0.04)"
+                stroke="rgba(212,168,67,0.18)"
+                strokeWidth={0.5}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: stage === "sd" ? 0.35 : 0.7 }}
+                transition={{ duration: 2 }}
+                vectorEffect="non-scaling-stroke"
+              />
 
-          {/* Network lines — Delaunay adjacency. Continuous strokes, no dashes. */}
-          <g>
-            {lines.map((l, i) => {
-              const stageReady =
-                stage === "world" || (stage === "us" && l.isUS);
-              return (
-                <motion.line
-                  key={l.key}
-                  x1={l.from.px}
-                  y1={l.from.py}
-                  x2={l.to.px}
-                  y2={l.to.py}
-                  stroke="#E8C97A"
-                  strokeWidth={0.9}
-                  vectorEffect="non-scaling-stroke"
-                  strokeLinecap="round"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: stageReady ? 0.7 : 0 }}
-                  transition={{
-                    duration: 0.6,
-                    delay: stageReady ? (i % 10) * 0.06 : 0,
-                    ease: "easeOut",
-                  }}
-                />
-              );
-            })}
-          </g>
+              {/* Network lines — Delaunay adjacency. Continuous strokes, no dashes. */}
+              <g>
+                {lines.map((l, i) => {
+                  const stageReady =
+                    stage === "world" || (stage === "us" && l.isUS);
+                  return (
+                    <motion.line
+                      key={`${tx}_${l.key}`}
+                      x1={l.from.px}
+                      y1={l.from.py}
+                      x2={l.to.px}
+                      y2={l.to.py}
+                      stroke="#E8C97A"
+                      strokeWidth={0.9}
+                      vectorEffect="non-scaling-stroke"
+                      strokeLinecap="round"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: stageReady ? 0.7 : 0 }}
+                      transition={{
+                        duration: 0.6,
+                        delay: stageReady ? (i % 10) * 0.06 : 0,
+                        ease: "easeOut",
+                      }}
+                    />
+                  );
+                })}
+              </g>
 
-          {/* Chapter dots — appear in sync with the lines that connect them */}
-          <g>
-            {projected.map((c, i) => {
-              const isFounding = c.status === "founding";
-              const isUS = isInUS(c);
-              const visible =
-                stage === "world" ||
-                (stage === "us" && isUS) ||
-                isFounding;
-              const dotR = isFounding ? 4 : 2.4;
-              const haloR = isFounding ? 22 : 12;
-              return (
-                <motion.g
-                  key={c.id}
-                  initial={{ opacity: isFounding ? 1 : 0 }}
-                  animate={{ opacity: visible ? 1 : 0 }}
-                  transition={{
-                    duration: 0.6,
-                    delay:
-                      visible && !isFounding ? (i % 10) * 0.06 : 0,
-                    ease: "easeOut",
-                  }}
-                >
-                  {/* Halo */}
-                  <motion.circle
-                    cx={c.px}
-                    cy={c.py}
-                    r={haloR}
-                    fill={
-                      isFounding ? "url(#dotHaloFounding)" : "url(#dotHalo)"
-                    }
-                    style={{
-                      transformOrigin: `${c.px}px ${c.py}px`,
-                      transformBox: "fill-box",
-                    }}
-                    animate={
-                      reduce
-                        ? undefined
-                        : {
-                            opacity: isFounding ? [0.7, 1, 0.7] : [0.4, 0.7, 0.4],
-                            scale: isFounding ? [1, 1.25, 1] : [1, 1.12, 1],
-                          }
-                    }
-                    transition={{
-                      duration: isFounding ? 2.4 : 3 + (c.lng + 180) % 1.5,
-                      repeat: Infinity,
-                      ease: "easeInOut",
-                    }}
-                  />
-                  {/* Dot */}
-                  <circle
-                    cx={c.px}
-                    cy={c.py}
-                    r={dotR}
-                    fill={isFounding ? "#FFE7A8" : "#D4A843"}
-                  />
-                </motion.g>
-              );
-            })}
-          </g>
+              {/* Chapter dots — appear in sync with the lines that connect them */}
+              <g>
+                {projected.map((c, i) => {
+                  const isFounding = c.status === "founding";
+                  const isUS = isInUS(c);
+                  const visible =
+                    stage === "world" ||
+                    (stage === "us" && isUS) ||
+                    isFounding;
+                  const dotR = isFounding ? 4 : 2.4;
+                  const haloR = isFounding ? 22 : 12;
+                  return (
+                    <motion.g
+                      key={`${tx}_${c.id}`}
+                      initial={{ opacity: isFounding ? 1 : 0 }}
+                      animate={{ opacity: visible ? 1 : 0 }}
+                      transition={{
+                        duration: 0.6,
+                        delay:
+                          visible && !isFounding ? (i % 10) * 0.06 : 0,
+                        ease: "easeOut",
+                      }}
+                    >
+                      {/* Halo */}
+                      <motion.circle
+                        cx={c.px}
+                        cy={c.py}
+                        r={haloR}
+                        fill={
+                          isFounding ? "url(#dotHaloFounding)" : "url(#dotHalo)"
+                        }
+                        style={{
+                          transformOrigin: `${c.px}px ${c.py}px`,
+                          transformBox: "fill-box",
+                        }}
+                        animate={
+                          reduce
+                            ? undefined
+                            : {
+                                opacity: isFounding ? [0.7, 1, 0.7] : [0.4, 0.7, 0.4],
+                                scale: isFounding ? [1, 1.25, 1] : [1, 1.12, 1],
+                              }
+                        }
+                        transition={{
+                          duration: isFounding ? 2.4 : 3 + (c.lng + 180) % 1.5,
+                          repeat: Infinity,
+                          ease: "easeInOut",
+                        }}
+                      />
+                      {/* Dot */}
+                      <circle
+                        cx={c.px}
+                        cy={c.py}
+                        r={dotR}
+                        fill={isFounding ? "#FFE7A8" : "#D4A843"}
+                      />
+                    </motion.g>
+                  );
+                })}
+              </g>
+            </g>
+          ))}
           </motion.g>
         </motion.g>
       </svg>
@@ -366,7 +351,7 @@ function FoundingLabel({
         className="absolute -translate-x-1/2 -translate-y-1/2"
         style={{ left: pos.left, top: pos.top }}
         initial={{ opacity: 0 }}
-        animate={{ opacity: stage === "sd" ? 1 : 0.2 }}
+        animate={{ opacity: stage === "sd" ? 1 : stage === "us" ? 0.2 : 0 }}
         transition={{ duration: 1, delay: stage === "sd" ? 0.6 : 0 }}
       >
         <div
