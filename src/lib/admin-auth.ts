@@ -8,6 +8,7 @@ export const ADMIN_USERS: Record<string, string> = {
   Jesse: "SEN",
   Tristin: "SEN",
   Irene: "SEN",
+  Andre: "SEN",
 };
 
 export const ADMIN_USER_LIST = Object.keys(ADMIN_USERS);
