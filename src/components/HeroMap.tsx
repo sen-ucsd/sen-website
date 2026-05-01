@@ -292,6 +292,7 @@ export function HeroMap() {
               );
             })}
           </g>
+          </motion.g>
         </motion.g>
       </svg>
 
