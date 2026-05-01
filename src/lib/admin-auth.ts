@@ -6,7 +6,7 @@ export const ADMIN_USERS: Record<string, string> = {
   Aryan: "SEN",
   Shawn: "SEN",
   Jesse: "SEN",
-  Andrew: "SEN",
+  Tristin: "SEN",
   Irene: "SEN",
 };
 
