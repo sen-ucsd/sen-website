@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { TaskStatus, TaskWithChildren, Task } from "./TaskBoard";
 import { ADMIN_USER_LIST } from "@/lib/admin-auth";
@@ -58,11 +58,24 @@ export function TaskNode({ task, depth, onAddChild, onUpdate, onDelete }: Props)
   const [expanded, setExpanded] = useState(true);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [armed, setArmed] = useState(false);
   const [draft, setDraft] = useState({
     title: task.title,
     description: task.description ?? "",
     due_date: task.due_date ?? "",
   });
+
+  // After flipping into "confirm delete" mode, give the user a brief beat
+  // before the Yes button is live. Otherwise the same tap that revealed the
+  // confirm pill can carry through and fire the delete on iOS / fast-tap.
+  useEffect(() => {
+    if (!confirmDelete) {
+      setArmed(false);
+      return;
+    }
+    const t = setTimeout(() => setArmed(true), 280);
+    return () => clearTimeout(t);
+  }, [confirmDelete]);
 
   const meta = STATUS_META[task.status];
   const isOverdue =
@@ -309,12 +322,16 @@ export function TaskNode({ task, depth, onAddChild, onUpdate, onDelete }: Props)
                 </span>
                 <button
                   type="button"
-                  onClick={() => onDelete(task.id)}
-                  className="text-[10px] tracking-wide rounded-full px-2 py-0.5"
+                  disabled={!armed}
+                  onClick={() => armed && onDelete(task.id)}
+                  className="text-[10px] tracking-wide rounded-full px-2 py-0.5 transition-opacity"
                   style={{
-                    background: "#E88C7A",
-                    color: "#050816",
+                    background: armed ? "#E88C7A" : "rgba(232, 140, 122, 0.3)",
+                    color: armed ? "#050816" : "rgba(5, 8, 22, 0.6)",
                     fontWeight: 500,
+                    opacity: armed ? 1 : 0.5,
+                    pointerEvents: armed ? "auto" : "none",
+                    cursor: armed ? "pointer" : "default",
                   }}
                 >
                   Yes
@@ -436,6 +453,19 @@ function MobileEditSheet({
   onDelete: () => void;
 }) {
   const [confirming, setConfirming] = useState(false);
+  const [armedDelete, setArmedDelete] = useState(false);
+
+  // Same "arm-with-delay" trick as the desktop confirmation: a too-fast
+  // double-tap can carry the original × tap onto the Confirm button that
+  // mounts in its place. Add a brief beat before Confirm is live.
+  useEffect(() => {
+    if (!confirming) {
+      setArmedDelete(false);
+      return;
+    }
+    const t = setTimeout(() => setArmedDelete(true), 280);
+    return () => clearTimeout(t);
+  }, [confirming]);
 
   return (
     <div className="md:hidden fixed inset-0 z-[80]">
@@ -694,12 +724,18 @@ function MobileEditSheet({
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={onDelete}
-                  className="rounded-full px-4 py-3 text-[12px]"
+                  disabled={!armedDelete}
+                  onClick={() => armedDelete && onDelete()}
+                  className="rounded-full px-4 py-3 text-[12px] transition-opacity"
                   style={{
-                    background: "#E88C7A",
-                    color: "#050816",
+                    background: armedDelete
+                      ? "#E88C7A"
+                      : "rgba(232, 140, 122, 0.35)",
+                    color: armedDelete ? "#050816" : "rgba(5, 8, 22, 0.55)",
                     fontWeight: 500,
+                    opacity: armedDelete ? 1 : 0.55,
+                    pointerEvents: armedDelete ? "auto" : "none",
+                    cursor: armedDelete ? "pointer" : "default",
                   }}
                 >
                   Confirm
@@ -825,19 +861,50 @@ function DateChip({
   isOverdue: boolean;
   onChange: (v: string | null) => void;
 }) {
+  // Buffer the value locally while the user is typing/picking. Only commit on
+  // blur. Otherwise every keystroke (e.g. typing year digits) hits the DB,
+  // realtime echoes back, the input re-renders, and the field resets while
+  // the user is still typing.
+  const [local, setLocal] = useState(value ?? "");
+  const focused = useRef(false);
+
+  useEffect(() => {
+    if (!focused.current) setLocal(value ?? "");
+  }, [value]);
+
+  function commit() {
+    const v = local || null;
+    if (v !== (value ?? null)) onChange(v);
+  }
+
   return (
     <input
       type="date"
-      value={value ?? ""}
-      onChange={(e) => onChange(e.target.value || null)}
+      value={local}
+      onFocus={() => {
+        focused.current = true;
+      }}
+      onBlur={() => {
+        focused.current = false;
+        commit();
+      }}
+      onChange={(e) => setLocal(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          (e.currentTarget as HTMLInputElement).blur();
+        } else if (e.key === "Escape") {
+          setLocal(value ?? "");
+          (e.currentTarget as HTMLInputElement).blur();
+        }
+      }}
       className="text-[11px] rounded-full px-3 py-1.5 outline-none"
       style={{
-        background: value
+        background: local
           ? isOverdue
             ? "rgba(232, 140, 122, 0.12)"
             : "rgba(20, 27, 45, 0.7)"
           : "rgba(20, 27, 45, 0.3)",
-        color: value
+        color: local
           ? isOverdue
             ? "#E88C7A"
             : "#F0ECE4"
