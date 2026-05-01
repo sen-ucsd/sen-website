@@ -1,16 +1,19 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { motion } from "framer-motion";
 import { loginAction } from "@/app/chapters/san-diego/admin/actions";
 import { ADMIN_USER_LIST } from "@/lib/admin-auth";
+import { BrandedSelect } from "./BrandedSelect";
 
 export function LoginForm({ next }: { next?: string }) {
   const [state, formAction, pending] = useActionState(loginAction, undefined);
+  const [username, setUsername] = useState<string>("");
 
   return (
     <form action={formAction} className="space-y-6">
       <input type="hidden" name="next" value={next ?? ""} />
+      <input type="hidden" name="username" value={username} />
 
       <label className="block">
         <span
@@ -19,31 +22,56 @@ export function LoginForm({ next }: { next?: string }) {
         >
           Username
         </span>
-        <select
-          name="username"
-          required
-          defaultValue=""
-          className="w-full rounded-lg px-4 py-3 outline-none transition-colors text-base appearance-none"
-          style={{
+        <BrandedSelect
+          ariaLabel="Username"
+          value={username}
+          onChange={(v) => setUsername(v)}
+          menuMinWidth={260}
+          variant="ghost"
+          options={[
+            { value: "", label: "Select your name" },
+            ...ADMIN_USER_LIST.map((u) => ({
+              value: u,
+              label: u,
+              badge: u.charAt(0),
+            })),
+          ]}
+          renderTrigger={(s) => (
+            <span className="flex items-center gap-2 flex-1 min-w-0">
+              {s?.badge && (
+                <span
+                  aria-hidden
+                  className="inline-flex items-center justify-center w-5 h-5 rounded-full text-[10px]"
+                  style={{
+                    background: "rgba(212, 168, 67, 0.18)",
+                    color: "#E8C97A",
+                    fontFamily: "var(--font-newsreader)",
+                    fontWeight: 600,
+                  }}
+                >
+                  {s.badge}
+                </span>
+              )}
+              <span
+                className="truncate"
+                style={{
+                  color: s?.value
+                    ? "#F0ECE4"
+                    : "rgba(240, 236, 228, 0.45)",
+                }}
+              >
+                {s?.label ?? "Select your name"}
+              </span>
+            </span>
+          )}
+          triggerStyle={{
+            width: "100%",
+            justifyContent: "space-between",
+            padding: "12px 16px",
+            borderRadius: 12,
             background: "rgba(20, 27, 45, 0.55)",
-            border: "1px solid rgba(30, 42, 69, 1)",
-            color: "#F0ECE4",
-            fontFamily: "var(--font-manrope)",
-            backgroundImage:
-              "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M1 1l4 4 4-4' stroke='%23A07C2E' stroke-width='1.4' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>\")",
-            backgroundRepeat: "no-repeat",
-            backgroundPosition: "right 16px center",
           }}
-        >
-          <option value="" disabled style={{ background: "#0A0E1A" }}>
-            Select your name
-          </option>
-          {ADMIN_USER_LIST.map((u) => (
-            <option key={u} value={u} style={{ background: "#0A0E1A" }}>
-              {u}
-            </option>
-          ))}
-        </select>
+        />
       </label>
 
       <label className="block">
@@ -76,7 +104,7 @@ export function LoginForm({ next }: { next?: string }) {
 
       <motion.button
         type="submit"
-        disabled={pending}
+        disabled={pending || !username}
         className="w-full rounded-full py-3.5 font-display text-[15px] tracking-wide disabled:opacity-50 disabled:cursor-not-allowed"
         style={{
           background: "#D4A843",
@@ -84,9 +112,11 @@ export function LoginForm({ next }: { next?: string }) {
           fontWeight: 500,
         }}
         whileHover={
-          !pending ? { scale: 1.02, boxShadow: "0 0 30px rgba(212,168,67,0.3)" } : undefined
+          !pending && username
+            ? { scale: 1.02, boxShadow: "0 0 30px rgba(212,168,67,0.3)" }
+            : undefined
         }
-        whileTap={!pending ? { scale: 0.98 } : undefined}
+        whileTap={!pending && username ? { scale: 0.98 } : undefined}
       >
         {pending ? "Signing in…" : "Sign In"}
       </motion.button>

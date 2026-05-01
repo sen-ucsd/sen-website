@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { AnimatePresence } from "framer-motion";
 import { supabase } from "@/lib/supabase";
-import { ADMIN_USER_LIST } from "@/lib/admin-auth";
+import { ADMIN_USER_LIST, ASSIGNEE_EVERYONE } from "@/lib/admin-auth";
 import { VisionCard } from "./VisionCard";
-import { TaskNode } from "./TaskNode";
+import { TaskNode, sortByPriority } from "./TaskNode";
 import { InlineAddTask } from "./InlineAddTask";
+import { BrandedSelect, type SelectOption } from "./BrandedSelect";
 
 export type TaskKind = "vision" | "task";
 export type TaskStatus = "todo" | "in_progress" | "done" | "blocked";
@@ -39,6 +40,21 @@ const STATUS_FILTERS: { value: TaskStatus | "all"; label: string }[] = [
   { value: "in_progress", label: "In Progress" },
   { value: "done", label: "Done" },
   { value: "blocked", label: "Blocked" },
+];
+
+const ASSIGNEE_FILTER_OPTIONS: SelectOption<string>[] = [
+  { value: "all", label: "Anyone" },
+  {
+    value: ASSIGNEE_EVERYONE,
+    label: ASSIGNEE_EVERYONE,
+    hint: "Whole board",
+    dot: "#E8C97A",
+  },
+  ...ADMIN_USER_LIST.map<SelectOption<string>>((u) => ({
+    value: u,
+    label: u,
+    badge: u.charAt(0),
+  })),
 ];
 
 export function TaskBoard({ currentUser }: { currentUser: string }) {
@@ -91,6 +107,7 @@ export function TaskBoard({ currentUser }: { currentUser: string }) {
   );
 
   // Tasks descend from the vision. Top-level tasks have parent_id = vision.id.
+  // Within each level, sort by assignee priority for the current user.
   const tree = useMemo<TaskWithChildren[]>(() => {
     if (!vision) return [];
     const byParent = new Map<string | null, Task[]>();
@@ -102,14 +119,23 @@ export function TaskBoard({ currentUser }: { currentUser: string }) {
     }
     function build(parentId: string | null): TaskWithChildren[] {
       const list = byParent.get(parentId) ?? [];
-      return list.map((t) => ({ ...t, children: build(t.id) }));
+      const built = list.map((t) => ({ ...t, children: build(t.id) }));
+      return sortByPriority(built, currentUser);
     }
-    // Top-level = children of the vision (parent_id = vision.id) plus any
-    // legacy orphan tasks (parent_id = null) that aren't the vision itself.
     const fromVision = build(vision.id);
     const legacyRoots = build(null);
-    return [...fromVision, ...legacyRoots];
-  }, [tasks, vision]);
+    return sortByPriority([...fromVision, ...legacyRoots], currentUser);
+  }, [tasks, vision, currentUser]);
+
+  // "Your focus" — count of tasks assigned to current user (or Everyone) and not done
+  const yourCount = useMemo(() => {
+    return tasks.filter(
+      (t) =>
+        t.kind !== "vision" &&
+        t.status !== "done" &&
+        (t.assignee === currentUser || t.assignee === ASSIGNEE_EVERYONE)
+    ).length;
+  }, [tasks, currentUser]);
 
   const stats = useMemo(() => {
     const today = new Date().toISOString().slice(0, 10);
@@ -213,64 +239,95 @@ export function TaskBoard({ currentUser }: { currentUser: string }) {
         <Stat label="Blocked" value={stats.blocked} accent="#E88C7A" />
       </div>
 
-      {/* Controls — single horizontal-scrollable row on mobile */}
-      <div
-        className="flex items-center gap-2 md:gap-3 -mx-4 sm:-mx-6 md:mx-0 px-4 sm:px-6 md:px-0 overflow-x-auto no-scrollbar"
-        style={{ scrollbarWidth: "none" }}
-      >
-        {STATUS_FILTERS.map((f) => (
-          <button
-            key={f.value}
-            type="button"
-            onClick={() => setStatusFilter(f.value)}
-            className="shrink-0 text-[12px] tracking-wide rounded-full px-3.5 md:px-4 py-1.5 transition-colors"
+      {/* Your-focus pill + controls */}
+      <div className="flex flex-col gap-3">
+        {/* Your focus banner */}
+        <div className="flex items-center gap-3 flex-wrap">
+          <div
+            className="inline-flex items-center gap-2.5 rounded-full px-3.5 py-1.5"
             style={{
-              border: "1px solid",
-              borderColor:
-                statusFilter === f.value
-                  ? "rgba(212, 168, 67, 0.55)"
-                  : "rgba(30, 42, 69, 1)",
               background:
-                statusFilter === f.value
-                  ? "rgba(212, 168, 67, 0.08)"
-                  : "transparent",
-              color:
-                statusFilter === f.value
-                  ? "#E8C97A"
-                  : "rgba(240, 236, 228, 0.55)",
+                "linear-gradient(135deg, rgba(212, 168, 67, 0.14) 0%, rgba(212, 168, 67, 0.06) 100%)",
+              border: "1px solid rgba(212, 168, 67, 0.35)",
             }}
           >
-            {f.label}
-          </button>
-        ))}
+            <span
+              aria-hidden
+              className="inline-flex items-center justify-center w-5 h-5 rounded-full text-[10px]"
+              style={{
+                background: "rgba(212, 168, 67, 0.25)",
+                color: "#E8C97A",
+                fontFamily: "var(--font-newsreader)",
+                fontWeight: 600,
+              }}
+            >
+              {currentUser.charAt(0)}
+            </span>
+            <span
+              className="text-[11px] tracking-[0.18em] uppercase"
+              style={{ color: "#E8C97A", fontFamily: "var(--font-manrope)", fontWeight: 500 }}
+            >
+              Your Focus
+            </span>
+            <span
+              className="font-display text-[14px]"
+              style={{ color: "#F0ECE4", fontWeight: 500 }}
+            >
+              {yourCount} {yourCount === 1 ? "task" : "tasks"}
+            </span>
+          </div>
+          <span
+            className="text-[11px]"
+            style={{ color: "rgba(240, 236, 228, 0.4)" }}
+          >
+            Tasks assigned to you (or the whole board) appear first.
+          </span>
+        </div>
 
-        <span className="shrink-0 w-px h-5 mx-1" style={{ background: "rgba(30,42,69,1)" }} />
-
-        <select
-          value={assigneeFilter}
-          onChange={(e) => setAssigneeFilter(e.target.value)}
-          className="shrink-0 text-[12px] rounded-full px-3.5 md:px-4 py-1.5 outline-none appearance-none"
-          style={{
-            background: "rgba(20, 27, 45, 0.5)",
-            border: "1px solid rgba(30, 42, 69, 1)",
-            color: "rgba(240, 236, 228, 0.7)",
-            fontFamily: "var(--font-manrope)",
-            backgroundImage:
-              "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M1 1l4 4 4-4' stroke='%23A07C2E' stroke-width='1.4' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>\")",
-            backgroundRepeat: "no-repeat",
-            backgroundPosition: "right 12px center",
-            paddingRight: 28,
-          }}
+        {/* Filter row — branded throughout */}
+        <div
+          className="flex items-center gap-2 md:gap-3 -mx-4 sm:-mx-6 md:mx-0 px-4 sm:px-6 md:px-0 overflow-x-auto no-scrollbar"
+          style={{ scrollbarWidth: "none" }}
         >
-          <option value="all" style={{ background: "#0A0E1A" }}>
-            Everyone
-          </option>
-          {ADMIN_USER_LIST.map((u) => (
-            <option key={u} value={u} style={{ background: "#0A0E1A" }}>
-              {u}
-            </option>
+          {STATUS_FILTERS.map((f) => (
+            <button
+              key={f.value}
+              type="button"
+              onClick={() => setStatusFilter(f.value)}
+              className="shrink-0 text-[12px] tracking-wide rounded-full px-3.5 md:px-4 py-1.5 transition-colors"
+              style={{
+                border: "1px solid",
+                borderColor:
+                  statusFilter === f.value
+                    ? "rgba(212, 168, 67, 0.55)"
+                    : "rgba(30, 42, 69, 1)",
+                background:
+                  statusFilter === f.value
+                    ? "rgba(212, 168, 67, 0.08)"
+                    : "transparent",
+                color:
+                  statusFilter === f.value
+                    ? "#E8C97A"
+                    : "rgba(240, 236, 228, 0.55)",
+              }}
+            >
+              {f.label}
+            </button>
           ))}
-        </select>
+
+          <span
+            className="shrink-0 w-px h-5 mx-1"
+            style={{ background: "rgba(30,42,69,1)" }}
+          />
+
+          <BrandedSelect
+            ariaLabel="Filter by assignee"
+            value={assigneeFilter}
+            options={ASSIGNEE_FILTER_OPTIONS}
+            onChange={(v) => setAssigneeFilter(v)}
+            menuMinWidth={180}
+          />
+        </div>
       </div>
 
       {error && (
@@ -299,6 +356,7 @@ export function TaskBoard({ currentUser }: { currentUser: string }) {
                   key={t.id}
                   task={t}
                   depth={0}
+                  currentUser={currentUser}
                   onAddChild={(parent, title) => addTask(parent.id, title)}
                   onUpdate={updateTask}
                   onDelete={deleteTask}

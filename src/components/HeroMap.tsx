@@ -24,6 +24,8 @@ import {
 export function HeroMap() {
   const reduce = useReducedMotion();
   const [stage, setStage] = useState<"sd" | "us" | "world">("sd");
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [panRange, setPanRange] = useState(0);
 
   useEffect(() => {
     if (reduce) {
@@ -37,6 +39,32 @@ export function HeroMap() {
       clearTimeout(t2);
     };
   }, [reduce]);
+
+  // Compute how far we can pan the inner <g> horizontally without exposing
+  // empty space past the SVG's intrinsic 1000-wide bounds. Because the SVG
+  // is rendered with `xMidYMid slice`, on viewports narrower than 2:1 (which
+  // is most desktop and all portrait phones) some of the world is cropped
+  // on each side; that cropped width is exactly how far we can safely pan.
+  useEffect(() => {
+    function update() {
+      const el = containerRef.current;
+      if (!el) return;
+      const w = el.clientWidth;
+      const h = el.clientHeight;
+      if (!w || !h) return;
+      const aspectSvg = WORLD_SVG_W / WORLD_SVG_H;
+      const aspectEl = w / h;
+      if (aspectEl < aspectSvg) {
+        const visibleSvgWidth = WORLD_SVG_H * aspectEl;
+        setPanRange((WORLD_SVG_W - visibleSvgWidth) / 2);
+      } else {
+        setPanRange(0);
+      }
+    }
+    update();
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, []);
 
   // Project chapters into the same viewBox as the world SVG path
   const projected = useMemo(
@@ -92,8 +120,10 @@ export function HeroMap() {
   const sdTx = WORLD_SVG_W / 2 - sd.px * sdScale;
   const sdTy = WORLD_SVG_H / 2 - sd.py * sdScale;
 
+  const panActive = stage === "world" && !reduce && panRange > 0;
+
   return (
-    <div className="absolute inset-0 z-0 overflow-hidden">
+    <div ref={containerRef} className="absolute inset-0 z-0 overflow-hidden">
       {/* Soft gold glow behind map */}
       <div
         aria-hidden
@@ -142,6 +172,26 @@ export function HeroMap() {
           }}
           transition={{ duration: 2.4, ease: [0.16, 1, 0.3, 1] }}
         >
+          {/* Slow ambient horizontal pan once the camera has landed on the world.
+              The keyframe sequence sweeps left, then right, then back through 0,
+              so the cropped edges of the map are revealed in turn. With repeat
+              reverse, the world keeps oscillating gently. */}
+          <motion.g
+            animate={{
+              x: panActive ? [0, -panRange, panRange] : 0,
+            }}
+            transition={{
+              x: panActive
+                ? {
+                    duration: 70,
+                    repeat: Infinity,
+                    repeatType: "reverse",
+                    ease: "easeInOut",
+                    delay: 1.8,
+                  }
+                : { duration: 0 },
+            }}
+          >
           {/* World map outline */}
           <motion.path
             d={WORLD_SVG_PATH}

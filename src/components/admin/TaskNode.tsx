@@ -3,8 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { TaskStatus, TaskWithChildren, Task } from "./TaskBoard";
-import { ADMIN_USER_LIST } from "@/lib/admin-auth";
+import { ADMIN_USER_LIST, ASSIGNEE_EVERYONE } from "@/lib/admin-auth";
 import { InlineAddTask } from "./InlineAddTask";
+import { BrandedSelect, type SelectOption } from "./BrandedSelect";
 
 const STATUS_META: Record<
   TaskStatus,
@@ -14,7 +15,7 @@ const STATUS_META: Record<
     label: "To Do",
     bg: "rgba(30, 42, 69, 0.7)",
     fg: "rgba(240, 236, 228, 0.65)",
-    dot: "rgba(240, 236, 228, 0.5)",
+    dot: "rgba(240, 236, 228, 0.55)",
   },
   in_progress: {
     label: "In Progress",
@@ -36,25 +37,61 @@ const STATUS_META: Record<
   },
 };
 
-const STATUS_OPTIONS: TaskStatus[] = ["todo", "in_progress", "done", "blocked"];
+const STATUS_OPTIONS: SelectOption<TaskStatus>[] = (["todo", "in_progress", "done", "blocked"] as TaskStatus[]).map(
+  (s) => ({
+    value: s,
+    label: STATUS_META[s].label,
+    dot: STATUS_META[s].dot,
+  })
+);
+
+type AssigneeValue = "" | typeof ASSIGNEE_EVERYONE | (typeof ADMIN_USER_LIST)[number];
+
+const ASSIGNEE_OPTIONS: SelectOption<AssigneeValue>[] = [
+  { value: "", label: "Unassigned" },
+  {
+    value: ASSIGNEE_EVERYONE,
+    label: ASSIGNEE_EVERYONE,
+    hint: "Whole board",
+    dot: "#E8C97A",
+  },
+  ...ADMIN_USER_LIST.map<SelectOption<AssigneeValue>>((u) => ({
+    value: u,
+    label: u,
+    badge: u.charAt(0),
+  })),
+];
 
 interface Props {
   task: TaskWithChildren;
   depth: number;
+  currentUser: string;
   onAddChild: (parent: Task, title: string) => void | Promise<void>;
   onUpdate: (id: string, patch: Partial<Task>) => void;
   onDelete: (id: string) => void;
 }
 
 function formatDate(d: string) {
-  // "2026-05-20" → "May 20"
   const [y, m, day] = d.split("-").map(Number);
   if (!y || !m || !day) return d;
   const date = new Date(y, m - 1, day);
   return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
-export function TaskNode({ task, depth, onAddChild, onUpdate, onDelete }: Props) {
+/** Returns true when the task is "yours" — directly assigned to current user OR to Everyone. */
+function isYours(t: { assignee: string | null }, currentUser: string) {
+  if (!t.assignee) return false;
+  return t.assignee === currentUser || t.assignee === ASSIGNEE_EVERYONE;
+}
+
+export function TaskNode({
+  task,
+  depth,
+  currentUser,
+  onAddChild,
+  onUpdate,
+  onDelete,
+}: Props) {
   const [expanded, setExpanded] = useState(true);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -65,9 +102,6 @@ export function TaskNode({ task, depth, onAddChild, onUpdate, onDelete }: Props)
     due_date: task.due_date ?? "",
   });
 
-  // After flipping into "confirm delete" mode, give the user a brief beat
-  // before the Yes button is live. Otherwise the same tap that revealed the
-  // confirm pill can carry through and fire the delete on iOS / fast-tap.
   useEffect(() => {
     if (!confirmDelete) {
       setArmed(false);
@@ -83,6 +117,8 @@ export function TaskNode({ task, depth, onAddChild, onUpdate, onDelete }: Props)
     task.due_date < new Date().toISOString().slice(0, 10) &&
     task.status !== "done";
   const hasChildren = task.children.length > 0;
+  const yours = isYours(task, currentUser);
+  const everyone = task.assignee === ASSIGNEE_EVERYONE;
 
   function startEdit() {
     setDraft({
@@ -106,6 +142,16 @@ export function TaskNode({ task, depth, onAddChild, onUpdate, onDelete }: Props)
     setDrawerOpen(false);
   }
 
+  // Visual treatment: cards assigned to you get a brighter gold left edge.
+  // Cards assigned to "Everyone" get a slightly subdued gold hint.
+  const cardBorder = isOverdue
+    ? "1px solid rgba(232, 140, 122, 0.45)"
+    : yours
+      ? everyone
+        ? "1px solid rgba(212, 168, 67, 0.32)"
+        : "1px solid rgba(212, 168, 67, 0.55)"
+      : "1px solid rgba(30, 42, 69, 1)";
+
   return (
     <motion.li
       layout
@@ -115,7 +161,7 @@ export function TaskNode({ task, depth, onAddChild, onUpdate, onDelete }: Props)
       transition={{ duration: 0.25 }}
       className="relative list-none"
     >
-      {/* Horizontal connector from spine to this card */}
+      {/* Horizontal connector + dot */}
       <span
         aria-hidden
         className="absolute top-5 md:top-7 -left-[18px] md:-left-[34px] w-3 md:w-7 h-px pointer-events-none"
@@ -124,14 +170,13 @@ export function TaskNode({ task, depth, onAddChild, onUpdate, onDelete }: Props)
             "linear-gradient(to right, rgba(160, 124, 46, 0.45) 0%, rgba(212, 168, 67, 0.4) 100%)",
         }}
       />
-      {/* Node dot at the spine */}
       <span
         aria-hidden
         className="absolute top-[18px] md:top-[26px] -left-[20px] md:-left-[38px] inline-block w-1.5 md:w-2 h-1.5 md:h-2 rounded-full pointer-events-none"
         style={{
           background: meta.dot,
           boxShadow: `0 0 8px ${
-            meta.dot === "rgba(240, 236, 228, 0.5)"
+            meta.dot === "rgba(240, 236, 228, 0.55)"
               ? "rgba(240,236,228,0.4)"
               : meta.dot
           }`,
@@ -139,17 +184,28 @@ export function TaskNode({ task, depth, onAddChild, onUpdate, onDelete }: Props)
       />
 
       <div
-        className="rounded-xl md:rounded-xl overflow-hidden transition-all"
+        className="relative rounded-xl overflow-hidden transition-all"
         style={{
-          background: "rgba(20, 27, 45, 0.5)",
-          border: `1px solid ${
-            isOverdue
-              ? "rgba(232, 140, 122, 0.4)"
-              : "rgba(30, 42, 69, 1)"
-          }`,
+          background: yours
+            ? "rgba(212, 168, 67, 0.04)"
+            : "rgba(20, 27, 45, 0.5)",
+          border: cardBorder,
         }}
       >
-        {/* Mobile compact card. Chevron + main tap target are siblings (no nested buttons). */}
+        {/* "For you" left-edge accent on cards assigned to current user */}
+        {yours && (
+          <span
+            aria-hidden
+            className="absolute left-0 top-0 bottom-0 w-[3px] pointer-events-none"
+            style={{
+              background: everyone
+                ? "linear-gradient(to bottom, rgba(212,168,67,0.5), rgba(160,124,46,0.2))"
+                : "linear-gradient(to bottom, #E8C97A, rgba(212,168,67,0.45))",
+            }}
+          />
+        )}
+
+        {/* Mobile compact card */}
         <div className="md:hidden flex items-stretch">
           {hasChildren ? (
             <button
@@ -176,9 +232,9 @@ export function TaskNode({ task, depth, onAddChild, onUpdate, onDelete }: Props)
             onClick={startEdit}
             className="flex-1 min-w-0 text-left pr-3.5 py-3 active:bg-[rgba(212,168,67,0.04)] transition-colors"
           >
-            <div className="mb-1.5">
+            <div className="mb-1.5 flex items-start gap-2">
               <span
-                className="block text-[15px] leading-tight line-clamp-2"
+                className="block flex-1 text-[15px] leading-tight line-clamp-2"
                 style={{
                   color:
                     task.status === "done"
@@ -192,16 +248,14 @@ export function TaskNode({ task, depth, onAddChild, onUpdate, onDelete }: Props)
               >
                 {task.title}
               </span>
+              {yours && (
+                <YouBadge everyone={everyone} />
+              )}
             </div>
-
-            {/* Meta row: status + assignee + date */}
             <div className="flex items-center gap-2 text-[11px] flex-wrap">
               <span
                 className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5"
-                style={{
-                  background: meta.bg,
-                  color: meta.fg,
-                }}
+                style={{ background: meta.bg, color: meta.fg }}
               >
                 <span
                   aria-hidden
@@ -223,7 +277,7 @@ export function TaskNode({ task, depth, onAddChild, onUpdate, onDelete }: Props)
                       fontFamily: "var(--font-newsreader)",
                     }}
                   >
-                    {task.assignee.charAt(0)}
+                    {task.assignee === ASSIGNEE_EVERYONE ? "·" : task.assignee.charAt(0)}
                   </span>
                   {task.assignee}
                 </span>
@@ -241,14 +295,14 @@ export function TaskNode({ task, depth, onAddChild, onUpdate, onDelete }: Props)
           </button>
         </div>
 
-        {/* Desktop layout — single row */}
+        {/* Desktop layout */}
         <div className="hidden md:flex items-center gap-3 px-5 py-3.5">
           {hasChildren ? (
             <button
               type="button"
               onClick={() => setExpanded((v) => !v)}
               aria-label={expanded ? "Collapse" : "Expand"}
-              className="shrink-0 w-6 h-6 rounded-md flex items-center justify-center transition-colors"
+              className="shrink-0 w-6 h-6 rounded-md flex items-center justify-center"
               style={{
                 color: "rgba(232, 201, 122, 0.7)",
                 background: "rgba(212, 168, 67, 0.06)",
@@ -276,7 +330,7 @@ export function TaskNode({ task, depth, onAddChild, onUpdate, onDelete }: Props)
           <button
             type="button"
             onClick={startEdit}
-            className="flex-1 min-w-0 text-left text-[15px] leading-snug truncate"
+            className="flex-1 min-w-0 text-left text-[15px] leading-snug truncate flex items-center gap-2"
             style={{
               color:
                 task.status === "done"
@@ -288,16 +342,38 @@ export function TaskNode({ task, depth, onAddChild, onUpdate, onDelete }: Props)
               fontWeight: 500,
             }}
           >
-            {task.title}
+            <span className="truncate">{task.title}</span>
+            {yours && <YouBadge everyone={everyone} compact />}
           </button>
 
-          <StatusPill
-            status={task.status}
+          {/* Branded selects */}
+          <BrandedSelect<TaskStatus>
+            ariaLabel="Status"
+            value={task.status}
+            options={STATUS_OPTIONS}
             onChange={(s) => onUpdate(task.id, { status: s })}
+            menuMinWidth={160}
+            triggerStyle={{
+              background: meta.bg,
+              color: meta.fg,
+              border: "1px solid rgba(30, 42, 69, 0.6)",
+              textTransform: "uppercase",
+              letterSpacing: "0.18em",
+              fontSize: 11,
+            }}
           />
-          <AssigneeChip
-            value={task.assignee}
-            onChange={(v) => onUpdate(task.id, { assignee: v })}
+          <BrandedSelect<AssigneeValue>
+            ariaLabel="Assignee"
+            value={(task.assignee as AssigneeValue) ?? ""}
+            options={ASSIGNEE_OPTIONS}
+            onChange={(v) => onUpdate(task.id, { assignee: v || null })}
+            menuMinWidth={180}
+            triggerStyle={{
+              background: task.assignee
+                ? "rgba(20, 27, 45, 0.7)"
+                : "rgba(20, 27, 45, 0.3)",
+              color: task.assignee ? "#F0ECE4" : "rgba(240, 236, 228, 0.45)",
+            }}
           />
           <DateChip
             value={task.due_date}
@@ -357,10 +433,10 @@ export function TaskNode({ task, depth, onAddChild, onUpdate, onDelete }: Props)
         </div>
       </div>
 
-      {/* Mobile bottom-sheet edit drawer */}
+      {/* Edit dialog — bottom sheet on mobile, centered modal on desktop */}
       <AnimatePresence>
         {drawerOpen && (
-          <MobileEditSheet
+          <TaskEditDialog
             task={task}
             draft={draft}
             setDraft={setDraft}
@@ -396,11 +472,12 @@ export function TaskNode({ task, depth, onAddChild, onUpdate, onDelete }: Props)
             />
 
             <ol className="space-y-3">
-              {task.children.map((child) => (
+              {sortByPriority(task.children, currentUser).map((child) => (
                 <TaskNode
                   key={child.id}
                   task={child}
                   depth={depth + 1}
+                  currentUser={currentUser}
                   onAddChild={onAddChild}
                   onUpdate={onUpdate}
                   onDelete={onDelete}
@@ -432,8 +509,106 @@ export function TaskNode({ task, depth, onAddChild, onUpdate, onDelete }: Props)
   );
 }
 
-/* Mobile edit sheet — slides up from the bottom */
-function MobileEditSheet({
+/** Sort children: assigned-to-you first, then Everyone, then everyone else. */
+export function sortByPriority<T extends TaskWithChildren>(
+  list: T[],
+  currentUser: string
+): T[] {
+  return [...list].sort((a, b) => {
+    const aMine = a.assignee === currentUser ? 0 : a.assignee === ASSIGNEE_EVERYONE ? 1 : 2;
+    const bMine = b.assignee === currentUser ? 0 : b.assignee === ASSIGNEE_EVERYONE ? 1 : 2;
+    if (aMine !== bMine) return aMine - bMine;
+    if (a.position !== b.position) return a.position - b.position;
+    return a.created_at.localeCompare(b.created_at);
+  });
+}
+
+function YouBadge({ everyone, compact }: { everyone: boolean; compact?: boolean }) {
+  return (
+    <span
+      className={`inline-flex items-center gap-1 rounded-full ${
+        compact ? "px-2 py-0.5" : "px-2 py-0.5"
+      } shrink-0`}
+      style={{
+        background: everyone
+          ? "rgba(212, 168, 67, 0.1)"
+          : "rgba(212, 168, 67, 0.16)",
+        color: "#E8C97A",
+        fontSize: 9,
+        letterSpacing: "0.22em",
+        textTransform: "uppercase",
+        fontFamily: "var(--font-manrope)",
+        fontWeight: 600,
+        border: "1px solid rgba(212, 168, 67, 0.3)",
+      }}
+    >
+      <span
+        aria-hidden
+        className="inline-block w-1 h-1 rounded-full"
+        style={{ background: "#E8C97A" }}
+      />
+      {everyone ? "All" : "You"}
+    </span>
+  );
+}
+
+/** Editable due-date chip that buffers locally and only commits on blur. */
+function DateChip({
+  value,
+  isOverdue,
+  onChange,
+}: {
+  value: string | null;
+  isOverdue: boolean;
+  onChange: (v: string | null) => void;
+}) {
+  const [local, setLocal] = useState(value ?? "");
+  const focused = useRef(false);
+  useEffect(() => {
+    if (!focused.current) setLocal(value ?? "");
+  }, [value]);
+  return (
+    <input
+      type="date"
+      value={local}
+      onFocus={() => {
+        focused.current = true;
+      }}
+      onBlur={() => {
+        focused.current = false;
+        const v = local || null;
+        if (v !== (value ?? null)) onChange(v);
+      }}
+      onChange={(e) => setLocal(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") (e.currentTarget as HTMLInputElement).blur();
+        else if (e.key === "Escape") {
+          setLocal(value ?? "");
+          (e.currentTarget as HTMLInputElement).blur();
+        }
+      }}
+      className="text-[11px] rounded-full px-3 py-1.5 outline-none"
+      style={{
+        background: local
+          ? isOverdue
+            ? "rgba(232, 140, 122, 0.12)"
+            : "rgba(20, 27, 45, 0.7)"
+          : "rgba(20, 27, 45, 0.3)",
+        color: local
+          ? isOverdue
+            ? "#E88C7A"
+            : "#F0ECE4"
+          : "rgba(240, 236, 228, 0.4)",
+        border: "1px solid rgba(30, 42, 69, 1)",
+        colorScheme: "dark",
+        fontFamily: "var(--font-manrope)",
+      }}
+    />
+  );
+}
+
+/** Edit dialog — slides up from the bottom on mobile, centered modal on desktop. */
+function TaskEditDialog({
   task,
   draft,
   setDraft,
@@ -455,9 +630,6 @@ function MobileEditSheet({
   const [confirming, setConfirming] = useState(false);
   const [armedDelete, setArmedDelete] = useState(false);
 
-  // Same "arm-with-delay" trick as the desktop confirmation: a too-fast
-  // double-tap can carry the original × tap onto the Confirm button that
-  // mounts in its place. Add a brief beat before Confirm is live.
   useEffect(() => {
     if (!confirming) {
       setArmedDelete(false);
@@ -467,8 +639,17 @@ function MobileEditSheet({
     return () => clearTimeout(t);
   }, [confirming]);
 
+  // Esc closes
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
   return (
-    <div className="md:hidden fixed inset-0 z-[80]">
+    <div className="fixed inset-0 z-[80]">
       {/* Backdrop */}
       <motion.div
         className="absolute inset-0"
@@ -480,13 +661,15 @@ function MobileEditSheet({
         onClick={onClose}
       />
 
-      {/* Sheet */}
+      {/* Sheet on mobile (bottom), modal on desktop (centered) */}
       <motion.div
-        className="absolute inset-x-0 bottom-0 rounded-t-2xl"
+        className="absolute inset-x-0 bottom-0 md:inset-0 md:m-auto rounded-t-2xl md:rounded-2xl"
         style={{
           background: "#0A0E1A",
-          borderTop: "1px solid rgba(212, 168, 67, 0.25)",
+          border: "1px solid rgba(212, 168, 67, 0.25)",
+          maxWidth: "min(640px, 96vw)",
           maxHeight: "92dvh",
+          width: "100%",
           paddingBottom: "max(20px, env(safe-area-inset-bottom))",
         }}
         initial={{ y: "100%" }}
@@ -494,8 +677,8 @@ function MobileEditSheet({
         exit={{ y: "100%" }}
         transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
       >
-        {/* Drag handle */}
-        <div className="flex justify-center pt-3 pb-1">
+        {/* Mobile drag handle */}
+        <div className="flex justify-center pt-3 pb-1 md:hidden">
           <span
             aria-hidden
             className="block w-10 h-1 rounded-full"
@@ -503,10 +686,10 @@ function MobileEditSheet({
           />
         </div>
 
-        <div className="px-5 pb-4 max-h-[80dvh] overflow-y-auto">
+        <div className="px-5 md:px-7 pb-4 md:pb-7 pt-2 md:pt-7 max-h-[80dvh] overflow-y-auto">
           <div className="flex items-center justify-between mb-5">
             <span
-              className="text-[10px] tracking-[0.25em] uppercase"
+              className="text-[10px] md:text-[11px] tracking-[0.25em] uppercase"
               style={{ color: "rgba(232, 201, 122, 0.6)" }}
             >
               Edit Task
@@ -515,7 +698,7 @@ function MobileEditSheet({
               type="button"
               onClick={onClose}
               aria-label="Close"
-              className="w-7 h-7 rounded-full flex items-center justify-center"
+              className="w-8 h-8 rounded-full flex items-center justify-center"
               style={{
                 border: "1px solid rgba(30, 42, 69, 1)",
                 color: "rgba(240, 236, 228, 0.6)",
@@ -526,7 +709,7 @@ function MobileEditSheet({
           </div>
 
           {/* Title */}
-          <label className="block mb-4">
+          <label className="block mb-5">
             <span
               className="block text-[11px] tracking-wide mb-2"
               style={{ color: "rgba(240, 236, 228, 0.5)" }}
@@ -540,7 +723,7 @@ function MobileEditSheet({
                 setDraft((d) => ({ ...d, title: e.target.value }))
               }
               rows={2}
-              className="w-full rounded-lg px-3 py-2.5 text-base outline-none resize-none"
+              className="w-full rounded-lg px-3.5 py-2.5 text-base outline-none resize-none"
               style={{
                 background: "rgba(5, 8, 22, 0.6)",
                 border: "1px solid rgba(30, 42, 69, 1)",
@@ -551,15 +734,15 @@ function MobileEditSheet({
           </label>
 
           {/* Status */}
-          <div className="mb-4">
+          <div className="mb-5">
             <span
               className="block text-[11px] tracking-wide mb-2"
               style={{ color: "rgba(240, 236, 228, 0.5)" }}
             >
               Status
             </span>
-            <div className="grid grid-cols-2 gap-2">
-              {STATUS_OPTIONS.map((s) => {
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+              {(Object.keys(STATUS_META) as TaskStatus[]).map((s) => {
                 const m = STATUS_META[s];
                 const active = task.status === s;
                 return (
@@ -589,7 +772,7 @@ function MobileEditSheet({
           </div>
 
           {/* Assignee */}
-          <div className="mb-4">
+          <div className="mb-5">
             <span
               className="block text-[11px] tracking-wide mb-2"
               style={{ color: "rgba(240, 236, 228, 0.5)" }}
@@ -597,35 +780,15 @@ function MobileEditSheet({
               Assignee
             </span>
             <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => onUpdate(task.id, { assignee: null })}
-                className="rounded-full px-3 py-1.5 text-[12px]"
-                style={{
-                  background:
-                    task.assignee === null
-                      ? "rgba(212, 168, 67, 0.12)"
-                      : "rgba(20, 27, 45, 0.5)",
-                  border: `1px solid ${
-                    task.assignee === null
-                      ? "rgba(212, 168, 67, 0.4)"
-                      : "rgba(30, 42, 69, 1)"
-                  }`,
-                  color:
-                    task.assignee === null
-                      ? "#E8C97A"
-                      : "rgba(240, 236, 228, 0.5)",
-                }}
-              >
-                Unassigned
-              </button>
-              {ADMIN_USER_LIST.map((u) => {
-                const active = task.assignee === u;
+              {ASSIGNEE_OPTIONS.map((opt) => {
+                const active = (task.assignee ?? "") === opt.value;
                 return (
                   <button
-                    key={u}
+                    key={opt.value || "_none"}
                     type="button"
-                    onClick={() => onUpdate(task.id, { assignee: u })}
+                    onClick={() =>
+                      onUpdate(task.id, { assignee: opt.value || null })
+                    }
                     className="rounded-full px-3 py-1.5 text-[12px] inline-flex items-center gap-1.5"
                     style={{
                       background: active
@@ -636,20 +799,32 @@ function MobileEditSheet({
                           ? "rgba(212, 168, 67, 0.4)"
                           : "rgba(30, 42, 69, 1)"
                       }`,
-                      color: active ? "#E8C97A" : "rgba(240, 236, 228, 0.7)",
+                      color: active
+                        ? "#E8C97A"
+                        : "rgba(240, 236, 228, 0.65)",
+                      fontFamily: "var(--font-manrope)",
                     }}
                   >
-                    <span
-                      className="inline-flex items-center justify-center w-4 h-4 rounded-full text-[9px]"
-                      style={{
-                        background: "rgba(212, 168, 67, 0.18)",
-                        color: "#E8C97A",
-                        fontFamily: "var(--font-newsreader)",
-                      }}
-                    >
-                      {u.charAt(0)}
-                    </span>
-                    {u}
+                    {opt.badge && (
+                      <span
+                        className="inline-flex items-center justify-center w-4 h-4 rounded-full text-[9px]"
+                        style={{
+                          background: "rgba(212, 168, 67, 0.18)",
+                          color: "#E8C97A",
+                          fontFamily: "var(--font-newsreader)",
+                        }}
+                      >
+                        {opt.badge}
+                      </span>
+                    )}
+                    {opt.dot && !opt.badge && (
+                      <span
+                        aria-hidden
+                        className="inline-block w-1.5 h-1.5 rounded-full"
+                        style={{ background: opt.dot }}
+                      />
+                    )}
+                    {opt.label}
                   </button>
                 );
               })}
@@ -657,7 +832,7 @@ function MobileEditSheet({
           </div>
 
           {/* Due date */}
-          <div className="mb-4">
+          <div className="mb-5">
             <span
               className="block text-[11px] tracking-wide mb-2"
               style={{ color: "rgba(240, 236, 228, 0.5)" }}
@@ -670,7 +845,7 @@ function MobileEditSheet({
               onChange={(e) =>
                 setDraft((d) => ({ ...d, due_date: e.target.value }))
               }
-              className="w-full rounded-lg px-3 py-2.5 text-base outline-none"
+              className="w-full rounded-lg px-3.5 py-2.5 text-base outline-none"
               style={{
                 background: "rgba(5, 8, 22, 0.6)",
                 border: "1px solid rgba(30, 42, 69, 1)",
@@ -682,7 +857,7 @@ function MobileEditSheet({
           </div>
 
           {/* Description */}
-          <div className="mb-6">
+          <div className="mb-7">
             <span
               className="block text-[11px] tracking-wide mb-2"
               style={{ color: "rgba(240, 236, 228, 0.5)" }}
@@ -696,7 +871,7 @@ function MobileEditSheet({
               }
               rows={4}
               placeholder="Anything that frames this task — links, context, blockers."
-              className="w-full rounded-lg px-3 py-2.5 text-base outline-none"
+              className="w-full rounded-lg px-3.5 py-2.5 text-base outline-none"
               style={{
                 background: "rgba(5, 8, 22, 0.6)",
                 border: "1px solid rgba(30, 42, 69, 1)",
@@ -767,153 +942,6 @@ function MobileEditSheet({
         </div>
       </motion.div>
     </div>
-  );
-}
-
-function StatusPill({
-  status,
-  onChange,
-}: {
-  status: TaskStatus;
-  onChange: (s: TaskStatus) => void;
-}) {
-  const meta = STATUS_META[status];
-  return (
-    <div className="relative inline-block">
-      <select
-        value={status}
-        onChange={(e) => onChange(e.target.value as TaskStatus)}
-        className="appearance-none text-[11px] tracking-[0.18em] uppercase rounded-full pl-7 pr-7 py-1.5 outline-none cursor-pointer"
-        style={{
-          background: meta.bg,
-          color: meta.fg,
-          border: "1px solid rgba(30, 42, 69, 0.5)",
-          fontFamily: "var(--font-manrope)",
-          fontWeight: 500,
-        }}
-      >
-        {STATUS_OPTIONS.map((s) => (
-          <option key={s} value={s} style={{ background: "#0A0E1A" }}>
-            {STATUS_META[s].label}
-          </option>
-        ))}
-      </select>
-      <span
-        aria-hidden
-        className="absolute left-2.5 top-1/2 -translate-y-1/2 inline-block w-1.5 h-1.5 rounded-full pointer-events-none"
-        style={{ background: meta.dot }}
-      />
-      <span
-        aria-hidden
-        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[8px] pointer-events-none"
-        style={{ color: meta.fg }}
-      >
-        ▾
-      </span>
-    </div>
-  );
-}
-
-function AssigneeChip({
-  value,
-  onChange,
-}: {
-  value: string | null;
-  onChange: (v: string | null) => void;
-}) {
-  return (
-    <select
-      value={value ?? ""}
-      onChange={(e) => onChange(e.target.value || null)}
-      className="appearance-none text-[11px] rounded-full px-3 py-1.5 outline-none cursor-pointer"
-      style={{
-        background: value
-          ? "rgba(20, 27, 45, 0.7)"
-          : "rgba(20, 27, 45, 0.3)",
-        color: value ? "#F0ECE4" : "rgba(240, 236, 228, 0.4)",
-        border: "1px solid rgba(30, 42, 69, 1)",
-        fontFamily: "var(--font-manrope)",
-        backgroundImage:
-          "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M1 1l4 4 4-4' stroke='%23A07C2E' stroke-width='1.4' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>\")",
-        backgroundRepeat: "no-repeat",
-        backgroundPosition: "right 8px center",
-        paddingRight: 22,
-      }}
-    >
-      <option value="" style={{ background: "#0A0E1A" }}>
-        Unassigned
-      </option>
-      {ADMIN_USER_LIST.map((u) => (
-        <option key={u} value={u} style={{ background: "#0A0E1A" }}>
-          {u}
-        </option>
-      ))}
-    </select>
-  );
-}
-
-function DateChip({
-  value,
-  isOverdue,
-  onChange,
-}: {
-  value: string | null;
-  isOverdue: boolean;
-  onChange: (v: string | null) => void;
-}) {
-  // Buffer the value locally while the user is typing/picking. Only commit on
-  // blur. Otherwise every keystroke (e.g. typing year digits) hits the DB,
-  // realtime echoes back, the input re-renders, and the field resets while
-  // the user is still typing.
-  const [local, setLocal] = useState(value ?? "");
-  const focused = useRef(false);
-
-  useEffect(() => {
-    if (!focused.current) setLocal(value ?? "");
-  }, [value]);
-
-  function commit() {
-    const v = local || null;
-    if (v !== (value ?? null)) onChange(v);
-  }
-
-  return (
-    <input
-      type="date"
-      value={local}
-      onFocus={() => {
-        focused.current = true;
-      }}
-      onBlur={() => {
-        focused.current = false;
-        commit();
-      }}
-      onChange={(e) => setLocal(e.target.value)}
-      onKeyDown={(e) => {
-        if (e.key === "Enter") {
-          (e.currentTarget as HTMLInputElement).blur();
-        } else if (e.key === "Escape") {
-          setLocal(value ?? "");
-          (e.currentTarget as HTMLInputElement).blur();
-        }
-      }}
-      className="text-[11px] rounded-full px-3 py-1.5 outline-none"
-      style={{
-        background: local
-          ? isOverdue
-            ? "rgba(232, 140, 122, 0.12)"
-            : "rgba(20, 27, 45, 0.7)"
-          : "rgba(20, 27, 45, 0.3)",
-        color: local
-          ? isOverdue
-            ? "#E88C7A"
-            : "#F0ECE4"
-          : "rgba(240, 236, 228, 0.4)",
-        border: "1px solid rgba(30, 42, 69, 1)",
-        colorScheme: "dark",
-        fontFamily: "var(--font-manrope)",
-      }}
-    />
   );
 }
 
