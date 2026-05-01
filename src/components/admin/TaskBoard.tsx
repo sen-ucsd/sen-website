@@ -4,19 +4,22 @@ import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/lib/supabase";
 import { ADMIN_USER_LIST } from "@/lib/admin-auth";
+import { VisionCard } from "./VisionCard";
 import { TaskNode } from "./TaskNode";
+import { InlineAddTask } from "./InlineAddTask";
 
+export type TaskKind = "vision" | "task";
 export type TaskStatus = "todo" | "in_progress" | "done" | "blocked";
-export type TaskPriority = "low" | "normal" | "high" | "urgent";
 
 export interface Task {
   id: string;
   chapter_id: string;
   parent_id: string | null;
+  kind: TaskKind;
   title: string;
   description: string | null;
   status: TaskStatus;
-  priority: TaskPriority;
+  priority: "low" | "normal" | "high" | "urgent";
   assignee: string | null;
   due_date: string | null;
   position: number;
@@ -49,7 +52,6 @@ export function TaskBoard({ currentUser }: { currentUser: string }) {
   useEffect(() => {
     let mounted = true;
     async function load() {
-      setLoading(true);
       const { data, error: e } = await supabase
         .from("tasks")
         .select("*")
@@ -83,10 +85,17 @@ export function TaskBoard({ currentUser }: { currentUser: string }) {
     };
   }, []);
 
-  // Build the tree
+  const vision = useMemo(
+    () => tasks.find((t) => t.kind === "vision") ?? null,
+    [tasks]
+  );
+
+  // Tasks descend from the vision. Top-level tasks have parent_id = vision.id.
   const tree = useMemo<TaskWithChildren[]>(() => {
+    if (!vision) return [];
     const byParent = new Map<string | null, Task[]>();
     for (const t of tasks) {
+      if (t.kind === "vision") continue;
       const arr = byParent.get(t.parent_id) ?? [];
       arr.push(t);
       byParent.set(t.parent_id, arr);
@@ -95,10 +104,13 @@ export function TaskBoard({ currentUser }: { currentUser: string }) {
       const list = byParent.get(parentId) ?? [];
       return list.map((t) => ({ ...t, children: build(t.id) }));
     }
-    return build(null);
-  }, [tasks]);
+    // Top-level = children of the vision (parent_id = vision.id) plus any
+    // legacy orphan tasks (parent_id = null) that aren't the vision itself.
+    const fromVision = build(vision.id);
+    const legacyRoots = build(null);
+    return [...fromVision, ...legacyRoots];
+  }, [tasks, vision]);
 
-  // Stats
   const stats = useMemo(() => {
     const today = new Date().toISOString().slice(0, 10);
     let total = 0,
@@ -108,22 +120,17 @@ export function TaskBoard({ currentUser }: { currentUser: string }) {
       blocked = 0,
       overdue = 0;
     for (const t of tasks) {
+      if (t.kind === "vision") continue;
       total++;
       if (t.status === "todo") todo++;
       else if (t.status === "in_progress") inProgress++;
       else if (t.status === "done") done++;
       else if (t.status === "blocked") blocked++;
-      if (
-        t.due_date &&
-        t.due_date < today &&
-        t.status !== "done"
-      )
-        overdue++;
+      if (t.due_date && t.due_date < today && t.status !== "done") overdue++;
     }
     return { total, todo, inProgress, done, blocked, overdue };
   }, [tasks]);
 
-  // Apply filters to the tree (keep nodes whose subtree contains a match)
   const filteredTree = useMemo<TaskWithChildren[]>(() => {
     if (statusFilter === "all" && assigneeFilter === "all") return tree;
     function matches(t: Task) {
@@ -136,41 +143,23 @@ export function TaskBoard({ currentUser }: { currentUser: string }) {
       const out: TaskWithChildren[] = [];
       for (const n of nodes) {
         const kids = filter(n.children);
-        if (matches(n) || kids.length > 0) {
-          out.push({ ...n, children: kids });
-        }
+        if (matches(n) || kids.length > 0) out.push({ ...n, children: kids });
       }
       return out;
     }
     return filter(tree);
   }, [tree, statusFilter, assigneeFilter]);
 
-  async function addRootTask() {
-    const title = window.prompt("New task title:");
-    if (!title?.trim()) return;
-    const maxPos = tasks
-      .filter((t) => t.parent_id === null)
-      .reduce((m, t) => Math.max(m, t.position), -1);
+  async function addTask(parentId: string, title: string) {
+    const t = title.trim();
+    if (!t) return;
+    const sibs = tasks.filter((x) => x.parent_id === parentId);
+    const maxPos = sibs.reduce((m, x) => Math.max(m, x.position), -1);
     const { error: e } = await supabase.from("tasks").insert({
       chapter_id: "san-diego",
-      title: title.trim(),
-      parent_id: null,
-      position: maxPos + 1,
-      created_by: currentUser,
-      updated_by: currentUser,
-    });
-    if (e) setError(e.message);
-  }
-
-  async function addChild(parent: Task) {
-    const title = window.prompt(`Subtask under "${parent.title}":`);
-    if (!title?.trim()) return;
-    const sibs = tasks.filter((t) => t.parent_id === parent.id);
-    const maxPos = sibs.reduce((m, t) => Math.max(m, t.position), -1);
-    const { error: e } = await supabase.from("tasks").insert({
-      chapter_id: "san-diego",
-      title: title.trim(),
-      parent_id: parent.id,
+      kind: "task",
+      title: t,
+      parent_id: parentId,
       position: maxPos + 1,
       created_by: currentUser,
       updated_by: currentUser,
@@ -186,23 +175,38 @@ export function TaskBoard({ currentUser }: { currentUser: string }) {
     if (e) setError(e.message);
   }
 
-  async function deleteTask(t: Task) {
-    const subCount = tasks.filter((x) => x.parent_id === t.id).length;
-    const msg =
-      subCount > 0
-        ? `Delete "${t.title}" and ${subCount} subtask${subCount === 1 ? "" : "s"}?`
-        : `Delete "${t.title}"?`;
-    if (!window.confirm(msg)) return;
-    const { error: e } = await supabase.from("tasks").delete().eq("id", t.id);
+  async function deleteTask(id: string) {
+    const { error: e } = await supabase.from("tasks").delete().eq("id", id);
     if (e) setError(e.message);
   }
 
+  if (loading) {
+    return (
+      <div
+        className="rounded-2xl p-12 text-center"
+        style={{
+          background: "rgba(20, 27, 45, 0.4)",
+          border: "1px solid rgba(30, 42, 69, 1)",
+        }}
+      >
+        <p className="text-[14px]" style={{ color: "rgba(240, 236, 228, 0.5)" }}>
+          Loading the network…
+        </p>
+      </div>
+    );
+  }
+
   return (
-    <div>
+    <div className="space-y-12">
+      {/* Vision (root of the WBS) */}
+      {vision && (
+        <VisionCard vision={vision} onUpdate={updateTask} />
+      )}
+
       {/* Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-10">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         <Stat label="Total" value={stats.total} />
-        <Stat label="To Do" value={stats.todo} accent="rgba(240,236,228,0.6)" />
+        <Stat label="To Do" value={stats.todo} accent="rgba(240,236,228,0.7)" />
         <Stat label="In Progress" value={stats.inProgress} accent="#E8C97A" />
         <Stat label="Done" value={stats.done} accent="#7AC892" />
         <Stat label="Blocked" value={stats.blocked} accent="#E88C7A" />
@@ -210,7 +214,7 @@ export function TaskBoard({ currentUser }: { currentUser: string }) {
       </div>
 
       {/* Controls */}
-      <div className="flex flex-wrap items-center gap-3 md:gap-5 mb-8">
+      <div className="flex flex-wrap items-center gap-3 md:gap-5">
         <div className="flex items-center gap-2 flex-wrap">
           {STATUS_FILTERS.map((f) => (
             <button
@@ -264,72 +268,69 @@ export function TaskBoard({ currentUser }: { currentUser: string }) {
             </option>
           ))}
         </select>
-
-        <div className="ml-auto">
-          <motion.button
-            type="button"
-            onClick={addRootTask}
-            className="rounded-full px-5 py-2 font-display text-[13px] tracking-wide"
-            style={{ background: "#D4A843", color: "#050816", fontWeight: 500 }}
-            whileHover={{ scale: 1.04, boxShadow: "0 0 24px rgba(212,168,67,0.3)" }}
-            whileTap={{ scale: 0.97 }}
-          >
-            + New Task
-          </motion.button>
-        </div>
       </div>
 
       {error && (
-        <p className="mb-4 text-[13px]" style={{ color: "#E8A35E" }}>
+        <p className="text-[13px]" style={{ color: "#E8A35E" }}>
           {error}
         </p>
       )}
 
-      {/* Tree */}
-      {loading ? (
-        <p className="text-[14px]" style={{ color: "rgba(240,236,228,0.4)" }}>
-          Loading…
-        </p>
-      ) : filteredTree.length === 0 ? (
-        <div
-          className="rounded-2xl p-12 text-center"
-          style={{
-            background: "rgba(20, 27, 45, 0.4)",
-            border: "1px dashed rgba(160, 124, 46, 0.3)",
-          }}
-        >
-          <p
-            className="font-display text-[20px] mb-3"
-            style={{ color: "rgba(240, 236, 228, 0.7)", fontWeight: 500 }}
-          >
-            {tasks.length === 0
-              ? "Nothing here yet."
-              : "No tasks match these filters."}
-          </p>
-          <p
-            className="text-[14px] max-w-md mx-auto"
-            style={{ color: "rgba(240, 236, 228, 0.45)" }}
-          >
-            {tasks.length === 0
-              ? "Create the first root task to start breaking down the quarter."
-              : "Loosen a filter or clear it to see everything."}
-          </p>
-        </div>
-      ) : (
-        <ol className="space-y-3">
-          <AnimatePresence initial={false}>
-            {filteredTree.map((t) => (
-              <TaskNode
-                key={t.id}
-                task={t}
-                depth={0}
-                onAddChild={addChild}
-                onUpdate={updateTask}
-                onDelete={deleteTask}
+      {/* The flow: vision → initiatives → tasks → subtasks */}
+      {vision && (
+        <div className="relative">
+          {/* Vertical spine going down from the vision */}
+          <div
+            aria-hidden
+            className="absolute top-0 bottom-0 w-px pointer-events-none"
+            style={{
+              left: 24,
+              background:
+                "linear-gradient(to bottom, rgba(212, 168, 67, 0.45) 0%, rgba(160, 124, 46, 0.2) 30%, rgba(160, 124, 46, 0.1) 100%)",
+            }}
+          />
+
+          <div className="space-y-4 pl-12">
+            <AnimatePresence initial={false}>
+              {filteredTree.map((t) => (
+                <TaskNode
+                  key={t.id}
+                  task={t}
+                  depth={0}
+                  onAddChild={(parent, title) => addTask(parent.id, title)}
+                  onUpdate={updateTask}
+                  onDelete={deleteTask}
+                />
+              ))}
+            </AnimatePresence>
+
+            {/* Inline add at the root level */}
+            <div className="relative">
+              {/* Connector dot for the add row */}
+              <span
+                aria-hidden
+                className="absolute -left-[34px] top-5 inline-block w-2 h-2 rounded-full"
+                style={{
+                  background: "rgba(212, 168, 67, 0.35)",
+                  boxShadow: "0 0 8px rgba(212, 168, 67, 0.3)",
+                }}
               />
-            ))}
-          </AnimatePresence>
-        </ol>
+              <InlineAddTask
+                placeholder="Add an initiative under the vision…"
+                onSubmit={(title) => addTask(vision.id, title)}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {!vision && (
+        <p
+          className="text-[14px] text-center py-12"
+          style={{ color: "rgba(240, 236, 228, 0.4)" }}
+        >
+          No vision set yet for this chapter.
+        </p>
       )}
     </div>
   );

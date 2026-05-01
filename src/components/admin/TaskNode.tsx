@@ -4,6 +4,7 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { TaskStatus, TaskWithChildren, Task } from "./TaskBoard";
 import { ADMIN_USER_LIST } from "@/lib/admin-auth";
+import { InlineAddTask } from "./InlineAddTask";
 
 const STATUS_META: Record<
   TaskStatus,
@@ -12,8 +13,8 @@ const STATUS_META: Record<
   todo: {
     label: "To Do",
     bg: "rgba(30, 42, 69, 0.7)",
-    fg: "rgba(240, 236, 228, 0.6)",
-    dot: "rgba(240, 236, 228, 0.45)",
+    fg: "rgba(240, 236, 228, 0.65)",
+    dot: "rgba(240, 236, 228, 0.5)",
   },
   in_progress: {
     label: "In Progress",
@@ -40,14 +41,15 @@ const STATUS_OPTIONS: TaskStatus[] = ["todo", "in_progress", "done", "blocked"];
 interface Props {
   task: TaskWithChildren;
   depth: number;
-  onAddChild: (parent: Task) => void;
+  onAddChild: (parent: Task, title: string) => void | Promise<void>;
   onUpdate: (id: string, patch: Partial<Task>) => void;
-  onDelete: (task: Task) => void;
+  onDelete: (id: string) => void;
 }
 
 export function TaskNode({ task, depth, onAddChild, onUpdate, onDelete }: Props) {
   const [expanded, setExpanded] = useState(true);
   const [editing, setEditing] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [draft, setDraft] = useState({
     title: task.title,
     description: task.description ?? "",
@@ -59,6 +61,7 @@ export function TaskNode({ task, depth, onAddChild, onUpdate, onDelete }: Props)
     !!task.due_date &&
     task.due_date < new Date().toISOString().slice(0, 10) &&
     task.status !== "done";
+  const hasChildren = task.children.length > 0;
 
   function startEdit() {
     setDraft({
@@ -89,44 +92,69 @@ export function TaskNode({ task, depth, onAddChild, onUpdate, onDelete }: Props)
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.97 }}
       transition={{ duration: 0.25 }}
-      style={{ marginLeft: depth === 0 ? 0 : 0 }}
+      className="relative list-none"
     >
-      <div
-        className="rounded-2xl overflow-hidden"
+      {/* Horizontal connector from spine to this card's left edge */}
+      <span
+        aria-hidden
+        className="absolute top-7 -left-[34px] w-[28px] h-px pointer-events-none"
         style={{
           background:
-            depth === 0 ? "rgba(20, 27, 45, 0.6)" : "rgba(20, 27, 45, 0.35)",
+            "linear-gradient(to right, rgba(160, 124, 46, 0.45) 0%, rgba(212, 168, 67, 0.4) 100%)",
+        }}
+      />
+      {/* Node dot at the spine */}
+      <span
+        aria-hidden
+        className="absolute top-[26px] -left-[38px] inline-block w-2 h-2 rounded-full pointer-events-none"
+        style={{
+          background: meta.dot,
+          boxShadow: `0 0 8px ${meta.dot === "rgba(240, 236, 228, 0.5)" ? "rgba(240,236,228,0.4)" : meta.dot}`,
+        }}
+      />
+
+      <div
+        className="rounded-xl overflow-hidden transition-all"
+        style={{
+          background: "rgba(20, 27, 45, 0.5)",
           border: `1px solid ${
-            isOverdue ? "rgba(232, 140, 122, 0.4)" : "rgba(30, 42, 69, 1)"
+            isOverdue
+              ? "rgba(232, 140, 122, 0.4)"
+              : "rgba(30, 42, 69, 1)"
           }`,
         }}
       >
         {/* Row */}
         <div className="flex items-start md:items-center gap-3 px-4 md:px-5 py-3.5">
-          {/* Expand/collapse */}
-          <button
-            type="button"
-            onClick={() => setExpanded((v) => !v)}
-            aria-label={expanded ? "Collapse" : "Expand"}
-            className="shrink-0 w-6 h-6 rounded-md flex items-center justify-center transition-colors"
-            style={{
-              color: task.children.length
-                ? "rgba(232, 201, 122, 0.7)"
-                : "rgba(240, 236, 228, 0.15)",
-              background: task.children.length
-                ? "rgba(212, 168, 67, 0.06)"
-                : "transparent",
-            }}
-          >
-            <motion.span
-              aria-hidden
-              className="inline-block"
-              animate={{ rotate: expanded ? 90 : 0 }}
-              transition={{ duration: 0.18 }}
+          {hasChildren ? (
+            <button
+              type="button"
+              onClick={() => setExpanded((v) => !v)}
+              aria-label={expanded ? "Collapse" : "Expand"}
+              className="shrink-0 w-6 h-6 rounded-md flex items-center justify-center transition-colors"
+              style={{
+                color: "rgba(232, 201, 122, 0.7)",
+                background: "rgba(212, 168, 67, 0.06)",
+              }}
             >
-              ▸
-            </motion.span>
-          </button>
+              <motion.span
+                aria-hidden
+                className="inline-block text-[11px]"
+                animate={{ rotate: expanded ? 90 : 0 }}
+                transition={{ duration: 0.18 }}
+              >
+                ▸
+              </motion.span>
+            </button>
+          ) : (
+            <span
+              aria-hidden
+              className="shrink-0 w-6 h-6 flex items-center justify-center"
+              style={{ color: "rgba(240, 236, 228, 0.15)" }}
+            >
+              ·
+            </span>
+          )}
 
           {/* Title (or edit input) */}
           <div className="flex-1 min-w-0">
@@ -142,7 +170,10 @@ export function TaskNode({ task, depth, onAddChild, onUpdate, onDelete }: Props)
                   if (e.key === "Escape") setEditing(false);
                 }}
                 className="w-full bg-transparent outline-none text-[15px] py-1"
-                style={{ color: "#F0ECE4", fontFamily: "var(--font-manrope)" }}
+                style={{
+                  color: "#F0ECE4",
+                  fontFamily: "var(--font-manrope)",
+                }}
               />
             ) : (
               <button
@@ -154,7 +185,8 @@ export function TaskNode({ task, depth, onAddChild, onUpdate, onDelete }: Props)
                     task.status === "done"
                       ? "rgba(240, 236, 228, 0.4)"
                       : "#F0ECE4",
-                  textDecoration: task.status === "done" ? "line-through" : "none",
+                  textDecoration:
+                    task.status === "done" ? "line-through" : "none",
                   fontFamily: "var(--font-manrope)",
                   fontWeight: 500,
                 }}
@@ -164,23 +196,19 @@ export function TaskNode({ task, depth, onAddChild, onUpdate, onDelete }: Props)
             )}
           </div>
 
-          {/* Status pill */}
+          {/* Status / assignee / date — desktop */}
           <div className="hidden sm:block">
             <StatusPill
               status={task.status}
               onChange={(s) => onUpdate(task.id, { status: s })}
             />
           </div>
-
-          {/* Assignee */}
           <div className="hidden md:block">
             <AssigneeChip
               value={task.assignee}
               onChange={(v) => onUpdate(task.id, { assignee: v })}
             />
           </div>
-
-          {/* Due date */}
           <div className="hidden md:block">
             <DateChip
               value={task.due_date}
@@ -189,23 +217,58 @@ export function TaskNode({ task, depth, onAddChild, onUpdate, onDelete }: Props)
             />
           </div>
 
-          {/* Actions */}
+          {/* Actions: delete (with inline confirm) */}
           <div className="flex items-center gap-1 shrink-0">
-            <IconButton
-              label="Add subtask"
-              onClick={() => onAddChild(task)}
-              symbol="+"
-            />
-            <IconButton
-              label="Delete task"
-              onClick={() => onDelete(task)}
-              symbol="×"
-              danger
-            />
+            {confirmDelete ? (
+              <div
+                className="flex items-center gap-1 rounded-full pl-2 pr-1 py-0.5"
+                style={{
+                  background: "rgba(232, 140, 122, 0.12)",
+                  border: "1px solid rgba(232, 140, 122, 0.4)",
+                }}
+              >
+                <span
+                  className="text-[10px] tracking-wide"
+                  style={{
+                    color: "#E88C7A",
+                    fontFamily: "var(--font-manrope)",
+                  }}
+                >
+                  Delete?
+                </span>
+                <button
+                  type="button"
+                  onClick={() => onDelete(task.id)}
+                  className="text-[10px] tracking-wide rounded-full px-2 py-0.5"
+                  style={{
+                    background: "#E88C7A",
+                    color: "#050816",
+                    fontWeight: 500,
+                  }}
+                >
+                  Yes
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmDelete(false)}
+                  className="text-[10px] tracking-wide rounded-full px-2 py-0.5"
+                  style={{ color: "rgba(240, 236, 228, 0.6)" }}
+                >
+                  No
+                </button>
+              </div>
+            ) : (
+              <IconButton
+                label="Delete task"
+                onClick={() => setConfirmDelete(true)}
+                symbol="×"
+                danger
+              />
+            )}
           </div>
         </div>
 
-        {/* Mobile: status / assignee / date row beneath title */}
+        {/* Mobile row of pills */}
         <div className="flex flex-wrap items-center gap-2 px-4 pb-3 sm:hidden">
           <StatusPill
             status={task.status}
@@ -225,7 +288,7 @@ export function TaskNode({ task, depth, onAddChild, onUpdate, onDelete }: Props)
         {/* Edit drawer */}
         {editing && (
           <div
-            className="px-5 pb-4 pt-1 grid sm:grid-cols-2 gap-3"
+            className="px-5 pb-4 pt-3 grid sm:grid-cols-2 gap-3"
             style={{ borderTop: "1px solid rgba(30, 42, 69, 1)" }}
           >
             <textarea
@@ -235,7 +298,7 @@ export function TaskNode({ task, depth, onAddChild, onUpdate, onDelete }: Props)
               }
               placeholder="Notes, context, links…"
               rows={3}
-              className="w-full rounded-lg px-3 py-2 text-[13px] outline-none mt-3"
+              className="w-full rounded-lg px-3 py-2 text-[13px] outline-none"
               style={{
                 background: "rgba(5, 8, 22, 0.5)",
                 border: "1px solid rgba(30, 42, 69, 1)",
@@ -243,7 +306,7 @@ export function TaskNode({ task, depth, onAddChild, onUpdate, onDelete }: Props)
                 fontFamily: "var(--font-manrope)",
               }}
             />
-            <div className="flex flex-col gap-2 mt-3">
+            <div className="flex flex-col gap-2">
               <input
                 type="date"
                 value={draft.due_date}
@@ -303,33 +366,59 @@ export function TaskNode({ task, depth, onAddChild, onUpdate, onDelete }: Props)
         )}
       </div>
 
-      {/* Children */}
+      {/* Children + inline add — connected by their own spine */}
       <AnimatePresence initial={false}>
-        {expanded && task.children.length > 0 && (
-          <motion.ol
+        {expanded && (
+          <motion.div
             layout
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: 0.2 }}
-            className="mt-3 space-y-3"
-            style={{
-              marginLeft: 22,
-              paddingLeft: 16,
-              borderLeft: "1px dashed rgba(160, 124, 46, 0.3)",
-            }}
+            transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+            className="relative ml-7 pl-7 mt-3 space-y-3"
           >
-            {task.children.map((child) => (
-              <TaskNode
-                key={child.id}
-                task={child}
-                depth={depth + 1}
-                onAddChild={onAddChild}
-                onUpdate={onUpdate}
-                onDelete={onDelete}
+            {/* Spine for this branch */}
+            <div
+              aria-hidden
+              className="absolute top-0 left-0 bottom-6 w-px pointer-events-none"
+              style={{
+                background:
+                  "linear-gradient(to bottom, rgba(160, 124, 46, 0.4) 0%, rgba(160, 124, 46, 0.15) 100%)",
+              }}
+            />
+
+            <ol className="space-y-3">
+              {task.children.map((child) => (
+                <TaskNode
+                  key={child.id}
+                  task={child}
+                  depth={depth + 1}
+                  onAddChild={onAddChild}
+                  onUpdate={onUpdate}
+                  onDelete={onDelete}
+                />
+              ))}
+            </ol>
+
+            {/* Inline add at this branch level */}
+            <div className="relative pt-1">
+              <span
+                aria-hidden
+                className="absolute -left-7 top-[14px] w-[22px] h-px pointer-events-none"
+                style={{ background: "rgba(160, 124, 46, 0.3)" }}
               />
-            ))}
-          </motion.ol>
+              <span
+                aria-hidden
+                className="absolute -left-[31px] top-[10px] inline-block w-[7px] h-[7px] rounded-full pointer-events-none"
+                style={{ background: "rgba(160, 124, 46, 0.45)" }}
+              />
+              <InlineAddTask
+                placeholder="Add a subtask"
+                compact
+                onSubmit={(title) => onAddChild(task, title)}
+              />
+            </div>
+          </motion.div>
         )}
       </AnimatePresence>
     </motion.li>
