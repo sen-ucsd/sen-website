@@ -197,56 +197,59 @@ export function TaskBoard({ currentUser }: { currentUser: string }) {
   }
 
   return (
-    <div className="space-y-12">
+    <div className="space-y-8 md:space-y-12">
       {/* Vision (root of the WBS) */}
       {vision && (
         <VisionCard vision={vision} onUpdate={updateTask} />
       )}
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+      {/* Stats — 3-col compact on mobile, 6-col on desktop */}
+      <div className="grid grid-cols-3 lg:grid-cols-6 gap-2 md:gap-3">
         <Stat label="Total" value={stats.total} />
+        <Stat label="In Prog" labelFull="In Progress" value={stats.inProgress} accent="#E8C97A" />
+        <Stat label="Overdue" value={stats.overdue} accent="#E88C7A" />
         <Stat label="To Do" value={stats.todo} accent="rgba(240,236,228,0.7)" />
-        <Stat label="In Progress" value={stats.inProgress} accent="#E8C97A" />
         <Stat label="Done" value={stats.done} accent="#7AC892" />
         <Stat label="Blocked" value={stats.blocked} accent="#E88C7A" />
-        <Stat label="Overdue" value={stats.overdue} accent="#E88C7A" />
       </div>
 
-      {/* Controls */}
-      <div className="flex flex-wrap items-center gap-3 md:gap-5">
-        <div className="flex items-center gap-2 flex-wrap">
-          {STATUS_FILTERS.map((f) => (
-            <button
-              key={f.value}
-              type="button"
-              onClick={() => setStatusFilter(f.value)}
-              className="text-[12px] tracking-wide rounded-full px-4 py-1.5 transition-colors"
-              style={{
-                border: "1px solid",
-                borderColor:
-                  statusFilter === f.value
-                    ? "rgba(212, 168, 67, 0.55)"
-                    : "rgba(30, 42, 69, 1)",
-                background:
-                  statusFilter === f.value
-                    ? "rgba(212, 168, 67, 0.08)"
-                    : "transparent",
-                color:
-                  statusFilter === f.value
-                    ? "#E8C97A"
-                    : "rgba(240, 236, 228, 0.55)",
-              }}
-            >
-              {f.label}
-            </button>
-          ))}
-        </div>
+      {/* Controls — single horizontal-scrollable row on mobile */}
+      <div
+        className="flex items-center gap-2 md:gap-3 -mx-4 sm:-mx-6 md:mx-0 px-4 sm:px-6 md:px-0 overflow-x-auto no-scrollbar"
+        style={{ scrollbarWidth: "none" }}
+      >
+        {STATUS_FILTERS.map((f) => (
+          <button
+            key={f.value}
+            type="button"
+            onClick={() => setStatusFilter(f.value)}
+            className="shrink-0 text-[12px] tracking-wide rounded-full px-3.5 md:px-4 py-1.5 transition-colors"
+            style={{
+              border: "1px solid",
+              borderColor:
+                statusFilter === f.value
+                  ? "rgba(212, 168, 67, 0.55)"
+                  : "rgba(30, 42, 69, 1)",
+              background:
+                statusFilter === f.value
+                  ? "rgba(212, 168, 67, 0.08)"
+                  : "transparent",
+              color:
+                statusFilter === f.value
+                  ? "#E8C97A"
+                  : "rgba(240, 236, 228, 0.55)",
+            }}
+          >
+            {f.label}
+          </button>
+        ))}
+
+        <span className="shrink-0 w-px h-5 mx-1" style={{ background: "rgba(30,42,69,1)" }} />
 
         <select
           value={assigneeFilter}
           onChange={(e) => setAssigneeFilter(e.target.value)}
-          className="text-[12px] rounded-full px-4 py-1.5 outline-none appearance-none"
+          className="shrink-0 text-[12px] rounded-full px-3.5 md:px-4 py-1.5 outline-none appearance-none"
           style={{
             background: "rgba(20, 27, 45, 0.5)",
             border: "1px solid rgba(30, 42, 69, 1)",
@@ -255,8 +258,8 @@ export function TaskBoard({ currentUser }: { currentUser: string }) {
             backgroundImage:
               "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M1 1l4 4 4-4' stroke='%23A07C2E' stroke-width='1.4' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>\")",
             backgroundRepeat: "no-repeat",
-            backgroundPosition: "right 14px center",
-            paddingRight: 32,
+            backgroundPosition: "right 12px center",
+            paddingRight: 28,
           }}
         >
           <option value="all" style={{ background: "#0A0E1A" }}>
@@ -279,18 +282,17 @@ export function TaskBoard({ currentUser }: { currentUser: string }) {
       {/* The flow: vision → initiatives → tasks → subtasks */}
       {vision && (
         <div className="relative">
-          {/* Vertical spine going down from the vision */}
+          {/* Vertical spine going down from the vision (compact on mobile) */}
           <div
             aria-hidden
-            className="absolute top-0 bottom-0 w-px pointer-events-none"
+            className="absolute top-0 bottom-0 w-px pointer-events-none left-3 md:left-6"
             style={{
-              left: 24,
               background:
                 "linear-gradient(to bottom, rgba(212, 168, 67, 0.45) 0%, rgba(160, 124, 46, 0.2) 30%, rgba(160, 124, 46, 0.1) 100%)",
             }}
           />
 
-          <div className="space-y-4 pl-12">
+          <div className="space-y-3 md:space-y-4 pl-7 md:pl-12">
             <AnimatePresence initial={false}>
               {filteredTree.map((t) => (
                 <TaskNode
@@ -306,14 +308,18 @@ export function TaskBoard({ currentUser }: { currentUser: string }) {
 
             {/* Inline add at the root level */}
             <div className="relative">
-              {/* Connector dot for the add row */}
               <span
                 aria-hidden
-                className="absolute -left-[34px] top-5 inline-block w-2 h-2 rounded-full"
+                className="absolute -left-[18px] md:-left-[34px] top-[14px] md:top-5 inline-block w-1.5 h-1.5 md:w-2 md:h-2 rounded-full"
                 style={{
                   background: "rgba(212, 168, 67, 0.35)",
                   boxShadow: "0 0 8px rgba(212, 168, 67, 0.3)",
                 }}
+              />
+              <span
+                aria-hidden
+                className="absolute -left-[16px] md:-left-[28px] top-[18px] md:top-[24px] w-3 md:w-5 h-px pointer-events-none"
+                style={{ background: "rgba(160, 124, 46, 0.3)" }}
               />
               <InlineAddTask
                 placeholder="Add an initiative under the vision…"
@@ -338,29 +344,35 @@ export function TaskBoard({ currentUser }: { currentUser: string }) {
 
 function Stat({
   label,
+  labelFull,
   value,
   accent = "#F0ECE4",
 }: {
   label: string;
+  labelFull?: string;
   value: number;
   accent?: string;
 }) {
   return (
     <div
-      className="rounded-2xl p-4"
+      className="rounded-xl md:rounded-2xl p-3 md:p-4"
       style={{
         background: "rgba(20, 27, 45, 0.4)",
         border: "1px solid rgba(30, 42, 69, 1)",
       }}
     >
       <p
-        className="text-eyebrow mb-2"
-        style={{ color: "rgba(240, 236, 228, 0.4)" }}
+        className="text-[9px] md:text-[11px] tracking-[0.18em] md:tracking-[0.25em] uppercase font-medium mb-1.5 md:mb-2 truncate"
+        style={{
+          color: "rgba(240, 236, 228, 0.4)",
+          fontFamily: "var(--font-manrope)",
+        }}
       >
-        {label}
+        <span className="md:hidden">{label}</span>
+        <span className="hidden md:inline">{labelFull ?? label}</span>
       </p>
       <p
-        className="font-display text-[28px] leading-none"
+        className="font-display text-[22px] md:text-[28px] leading-none"
         style={{ color: accent, fontWeight: 500 }}
       >
         {value}

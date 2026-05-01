@@ -46,9 +46,17 @@ interface Props {
   onDelete: (id: string) => void;
 }
 
+function formatDate(d: string) {
+  // "2026-05-20" → "May 20"
+  const [y, m, day] = d.split("-").map(Number);
+  if (!y || !m || !day) return d;
+  const date = new Date(y, m - 1, day);
+  return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
 export function TaskNode({ task, depth, onAddChild, onUpdate, onDelete }: Props) {
   const [expanded, setExpanded] = useState(true);
-  const [editing, setEditing] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [draft, setDraft] = useState({
     title: task.title,
@@ -69,12 +77,12 @@ export function TaskNode({ task, depth, onAddChild, onUpdate, onDelete }: Props)
       description: task.description ?? "",
       due_date: task.due_date ?? "",
     });
-    setEditing(true);
+    setDrawerOpen(true);
   }
   function commitEdit() {
     const t = draft.title.trim();
     if (!t) {
-      setEditing(false);
+      setDrawerOpen(false);
       return;
     }
     onUpdate(task.id, {
@@ -82,7 +90,7 @@ export function TaskNode({ task, depth, onAddChild, onUpdate, onDelete }: Props)
       description: draft.description.trim() || null,
       due_date: draft.due_date || null,
     });
-    setEditing(false);
+    setDrawerOpen(false);
   }
 
   return (
@@ -94,10 +102,10 @@ export function TaskNode({ task, depth, onAddChild, onUpdate, onDelete }: Props)
       transition={{ duration: 0.25 }}
       className="relative list-none"
     >
-      {/* Horizontal connector from spine to this card's left edge */}
+      {/* Horizontal connector from spine to this card */}
       <span
         aria-hidden
-        className="absolute top-7 -left-[34px] w-[28px] h-px pointer-events-none"
+        className="absolute top-5 md:top-7 -left-[18px] md:-left-[34px] w-3 md:w-7 h-px pointer-events-none"
         style={{
           background:
             "linear-gradient(to right, rgba(160, 124, 46, 0.45) 0%, rgba(212, 168, 67, 0.4) 100%)",
@@ -106,15 +114,19 @@ export function TaskNode({ task, depth, onAddChild, onUpdate, onDelete }: Props)
       {/* Node dot at the spine */}
       <span
         aria-hidden
-        className="absolute top-[26px] -left-[38px] inline-block w-2 h-2 rounded-full pointer-events-none"
+        className="absolute top-[18px] md:top-[26px] -left-[20px] md:-left-[38px] inline-block w-1.5 md:w-2 h-1.5 md:h-2 rounded-full pointer-events-none"
         style={{
           background: meta.dot,
-          boxShadow: `0 0 8px ${meta.dot === "rgba(240, 236, 228, 0.5)" ? "rgba(240,236,228,0.4)" : meta.dot}`,
+          boxShadow: `0 0 8px ${
+            meta.dot === "rgba(240, 236, 228, 0.5)"
+              ? "rgba(240,236,228,0.4)"
+              : meta.dot
+          }`,
         }}
       />
 
       <div
-        className="rounded-xl overflow-hidden transition-all"
+        className="rounded-xl md:rounded-xl overflow-hidden transition-all"
         style={{
           background: "rgba(20, 27, 45, 0.5)",
           border: `1px solid ${
@@ -124,8 +136,100 @@ export function TaskNode({ task, depth, onAddChild, onUpdate, onDelete }: Props)
           }`,
         }}
       >
-        {/* Row */}
-        <div className="flex items-start md:items-center gap-3 px-4 md:px-5 py-3.5">
+        {/* Mobile compact card. Chevron + main tap target are siblings (no nested buttons). */}
+        <div className="md:hidden flex items-stretch">
+          {hasChildren ? (
+            <button
+              type="button"
+              onClick={() => setExpanded((v) => !v)}
+              aria-label={expanded ? "Collapse" : "Expand"}
+              className="shrink-0 w-9 flex items-start justify-center pt-3.5"
+              style={{ color: "rgba(232, 201, 122, 0.7)" }}
+            >
+              <motion.span
+                aria-hidden
+                className="inline-block text-[11px]"
+                animate={{ rotate: expanded ? 90 : 0 }}
+                transition={{ duration: 0.18 }}
+              >
+                ▸
+              </motion.span>
+            </button>
+          ) : (
+            <span aria-hidden className="shrink-0 w-3" />
+          )}
+          <button
+            type="button"
+            onClick={startEdit}
+            className="flex-1 min-w-0 text-left pr-3.5 py-3 active:bg-[rgba(212,168,67,0.04)] transition-colors"
+          >
+            <div className="mb-1.5">
+              <span
+                className="block text-[15px] leading-tight line-clamp-2"
+                style={{
+                  color:
+                    task.status === "done"
+                      ? "rgba(240, 236, 228, 0.45)"
+                      : "#F0ECE4",
+                  textDecoration:
+                    task.status === "done" ? "line-through" : "none",
+                  fontFamily: "var(--font-manrope)",
+                  fontWeight: 500,
+                }}
+              >
+                {task.title}
+              </span>
+            </div>
+
+            {/* Meta row: status + assignee + date */}
+            <div className="flex items-center gap-2 text-[11px] flex-wrap">
+              <span
+                className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5"
+                style={{
+                  background: meta.bg,
+                  color: meta.fg,
+                }}
+              >
+                <span
+                  aria-hidden
+                  className="inline-block w-1 h-1 rounded-full"
+                  style={{ background: meta.dot }}
+                />
+                {meta.label}
+              </span>
+              {task.assignee && (
+                <span
+                  className="inline-flex items-center gap-1.5"
+                  style={{ color: "rgba(240, 236, 228, 0.6)" }}
+                >
+                  <span
+                    className="inline-flex items-center justify-center w-4 h-4 rounded-full text-[9px]"
+                    style={{
+                      background: "rgba(212, 168, 67, 0.15)",
+                      color: "#E8C97A",
+                      fontFamily: "var(--font-newsreader)",
+                    }}
+                  >
+                    {task.assignee.charAt(0)}
+                  </span>
+                  {task.assignee}
+                </span>
+              )}
+              {task.due_date && (
+                <span
+                  style={{
+                    color: isOverdue ? "#E88C7A" : "rgba(240, 236, 228, 0.5)",
+                  }}
+                >
+                  {formatDate(task.due_date)}
+                </span>
+              )}
+            </div>
+          </button>
+        </div>
+
+        {/* Desktop layout — single row */}
+        <div className="hidden md:flex items-center gap-3 px-5 py-3.5">
           {hasChildren ? (
             <button
               type="button"
@@ -156,68 +260,38 @@ export function TaskNode({ task, depth, onAddChild, onUpdate, onDelete }: Props)
             </span>
           )}
 
-          {/* Title (or edit input) */}
-          <div className="flex-1 min-w-0">
-            {editing ? (
-              <input
-                autoFocus
-                value={draft.title}
-                onChange={(e) =>
-                  setDraft((d) => ({ ...d, title: e.target.value }))
-                }
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") commitEdit();
-                  if (e.key === "Escape") setEditing(false);
-                }}
-                className="w-full bg-transparent outline-none text-[15px] py-1"
-                style={{
-                  color: "#F0ECE4",
-                  fontFamily: "var(--font-manrope)",
-                }}
-              />
-            ) : (
-              <button
-                type="button"
-                onClick={startEdit}
-                className="text-left text-[15px] leading-snug w-full truncate"
-                style={{
-                  color:
-                    task.status === "done"
-                      ? "rgba(240, 236, 228, 0.4)"
-                      : "#F0ECE4",
-                  textDecoration:
-                    task.status === "done" ? "line-through" : "none",
-                  fontFamily: "var(--font-manrope)",
-                  fontWeight: 500,
-                }}
-              >
-                {task.title}
-              </button>
-            )}
-          </div>
+          <button
+            type="button"
+            onClick={startEdit}
+            className="flex-1 min-w-0 text-left text-[15px] leading-snug truncate"
+            style={{
+              color:
+                task.status === "done"
+                  ? "rgba(240, 236, 228, 0.4)"
+                  : "#F0ECE4",
+              textDecoration:
+                task.status === "done" ? "line-through" : "none",
+              fontFamily: "var(--font-manrope)",
+              fontWeight: 500,
+            }}
+          >
+            {task.title}
+          </button>
 
-          {/* Status / assignee / date — desktop */}
-          <div className="hidden sm:block">
-            <StatusPill
-              status={task.status}
-              onChange={(s) => onUpdate(task.id, { status: s })}
-            />
-          </div>
-          <div className="hidden md:block">
-            <AssigneeChip
-              value={task.assignee}
-              onChange={(v) => onUpdate(task.id, { assignee: v })}
-            />
-          </div>
-          <div className="hidden md:block">
-            <DateChip
-              value={task.due_date}
-              isOverdue={isOverdue}
-              onChange={(v) => onUpdate(task.id, { due_date: v })}
-            />
-          </div>
+          <StatusPill
+            status={task.status}
+            onChange={(s) => onUpdate(task.id, { status: s })}
+          />
+          <AssigneeChip
+            value={task.assignee}
+            onChange={(v) => onUpdate(task.id, { assignee: v })}
+          />
+          <DateChip
+            value={task.due_date}
+            isOverdue={isOverdue}
+            onChange={(v) => onUpdate(task.id, { due_date: v })}
+          />
 
-          {/* Actions: delete (with inline confirm) */}
           <div className="flex items-center gap-1 shrink-0">
             {confirmDelete ? (
               <div
@@ -229,10 +303,7 @@ export function TaskNode({ task, depth, onAddChild, onUpdate, onDelete }: Props)
               >
                 <span
                   className="text-[10px] tracking-wide"
-                  style={{
-                    color: "#E88C7A",
-                    fontFamily: "var(--font-manrope)",
-                  }}
+                  style={{ color: "#E88C7A" }}
                 >
                   Delete?
                 </span>
@@ -267,106 +338,27 @@ export function TaskNode({ task, depth, onAddChild, onUpdate, onDelete }: Props)
             )}
           </div>
         </div>
-
-        {/* Mobile row of pills */}
-        <div className="flex flex-wrap items-center gap-2 px-4 pb-3 sm:hidden">
-          <StatusPill
-            status={task.status}
-            onChange={(s) => onUpdate(task.id, { status: s })}
-          />
-          <AssigneeChip
-            value={task.assignee}
-            onChange={(v) => onUpdate(task.id, { assignee: v })}
-          />
-          <DateChip
-            value={task.due_date}
-            isOverdue={isOverdue}
-            onChange={(v) => onUpdate(task.id, { due_date: v })}
-          />
-        </div>
-
-        {/* Edit drawer */}
-        {editing && (
-          <div
-            className="px-5 pb-4 pt-3 grid sm:grid-cols-2 gap-3"
-            style={{ borderTop: "1px solid rgba(30, 42, 69, 1)" }}
-          >
-            <textarea
-              value={draft.description}
-              onChange={(e) =>
-                setDraft((d) => ({ ...d, description: e.target.value }))
-              }
-              placeholder="Notes, context, links…"
-              rows={3}
-              className="w-full rounded-lg px-3 py-2 text-[13px] outline-none"
-              style={{
-                background: "rgba(5, 8, 22, 0.5)",
-                border: "1px solid rgba(30, 42, 69, 1)",
-                color: "#F0ECE4",
-                fontFamily: "var(--font-manrope)",
-              }}
-            />
-            <div className="flex flex-col gap-2">
-              <input
-                type="date"
-                value={draft.due_date}
-                onChange={(e) =>
-                  setDraft((d) => ({ ...d, due_date: e.target.value }))
-                }
-                className="rounded-lg px-3 py-2 text-[13px] outline-none"
-                style={{
-                  background: "rgba(5, 8, 22, 0.5)",
-                  border: "1px solid rgba(30, 42, 69, 1)",
-                  color: "#F0ECE4",
-                  colorScheme: "dark",
-                }}
-              />
-              <div className="flex items-center gap-2 mt-auto">
-                <button
-                  type="button"
-                  onClick={commitEdit}
-                  className="text-[12px] tracking-wide rounded-full px-4 py-1.5"
-                  style={{
-                    background: "#D4A843",
-                    color: "#050816",
-                    fontWeight: 500,
-                    fontFamily: "var(--font-manrope)",
-                  }}
-                >
-                  Save
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setEditing(false)}
-                  className="text-[12px] tracking-wide rounded-full px-4 py-1.5"
-                  style={{
-                    border: "1px solid rgba(30, 42, 69, 1)",
-                    color: "rgba(240, 236, 228, 0.6)",
-                  }}
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Description preview when collapsed */}
-        {!editing && task.description && expanded && (
-          <p
-            className="px-5 pb-4 text-[13px] leading-[1.65]"
-            style={{
-              color: "rgba(240, 236, 228, 0.5)",
-              borderTop: "1px solid rgba(30, 42, 69, 1)",
-              paddingTop: 12,
-            }}
-          >
-            {task.description}
-          </p>
-        )}
       </div>
 
-      {/* Children + inline add — connected by their own spine */}
+      {/* Mobile bottom-sheet edit drawer */}
+      <AnimatePresence>
+        {drawerOpen && (
+          <MobileEditSheet
+            task={task}
+            draft={draft}
+            setDraft={setDraft}
+            onClose={() => setDrawerOpen(false)}
+            onSave={commitEdit}
+            onUpdate={onUpdate}
+            onDelete={() => {
+              setDrawerOpen(false);
+              onDelete(task.id);
+            }}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Children + inline add */}
       <AnimatePresence initial={false}>
         {expanded && (
           <motion.div
@@ -375,9 +367,8 @@ export function TaskNode({ task, depth, onAddChild, onUpdate, onDelete }: Props)
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
             transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-            className="relative ml-7 pl-7 mt-3 space-y-3"
+            className="relative ml-4 md:ml-7 pl-4 md:pl-7 mt-3 space-y-3"
           >
-            {/* Spine for this branch */}
             <div
               aria-hidden
               className="absolute top-0 left-0 bottom-6 w-px pointer-events-none"
@@ -400,16 +391,15 @@ export function TaskNode({ task, depth, onAddChild, onUpdate, onDelete }: Props)
               ))}
             </ol>
 
-            {/* Inline add at this branch level */}
             <div className="relative pt-1">
               <span
                 aria-hidden
-                className="absolute -left-7 top-[14px] w-[22px] h-px pointer-events-none"
+                className="absolute -left-4 md:-left-7 top-[14px] w-3 md:w-[22px] h-px pointer-events-none"
                 style={{ background: "rgba(160, 124, 46, 0.3)" }}
               />
               <span
                 aria-hidden
-                className="absolute -left-[31px] top-[10px] inline-block w-[7px] h-[7px] rounded-full pointer-events-none"
+                className="absolute -left-[18px] md:-left-[31px] top-[10px] inline-block w-[6px] md:w-[7px] h-[6px] md:h-[7px] rounded-full pointer-events-none"
                 style={{ background: "rgba(160, 124, 46, 0.45)" }}
               />
               <InlineAddTask
@@ -422,6 +412,325 @@ export function TaskNode({ task, depth, onAddChild, onUpdate, onDelete }: Props)
         )}
       </AnimatePresence>
     </motion.li>
+  );
+}
+
+/* Mobile edit sheet — slides up from the bottom */
+function MobileEditSheet({
+  task,
+  draft,
+  setDraft,
+  onClose,
+  onSave,
+  onUpdate,
+  onDelete,
+}: {
+  task: TaskWithChildren;
+  draft: { title: string; description: string; due_date: string };
+  setDraft: React.Dispatch<
+    React.SetStateAction<{ title: string; description: string; due_date: string }>
+  >;
+  onClose: () => void;
+  onSave: () => void;
+  onUpdate: (id: string, patch: Partial<Task>) => void;
+  onDelete: () => void;
+}) {
+  const [confirming, setConfirming] = useState(false);
+
+  return (
+    <div className="md:hidden fixed inset-0 z-[80]">
+      {/* Backdrop */}
+      <motion.div
+        className="absolute inset-0"
+        style={{ background: "rgba(5, 8, 22, 0.7)", backdropFilter: "blur(6px)" }}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.2 }}
+        onClick={onClose}
+      />
+
+      {/* Sheet */}
+      <motion.div
+        className="absolute inset-x-0 bottom-0 rounded-t-2xl"
+        style={{
+          background: "#0A0E1A",
+          borderTop: "1px solid rgba(212, 168, 67, 0.25)",
+          maxHeight: "92dvh",
+          paddingBottom: "max(20px, env(safe-area-inset-bottom))",
+        }}
+        initial={{ y: "100%" }}
+        animate={{ y: 0 }}
+        exit={{ y: "100%" }}
+        transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+      >
+        {/* Drag handle */}
+        <div className="flex justify-center pt-3 pb-1">
+          <span
+            aria-hidden
+            className="block w-10 h-1 rounded-full"
+            style={{ background: "rgba(212, 168, 67, 0.3)" }}
+          />
+        </div>
+
+        <div className="px-5 pb-4 max-h-[80dvh] overflow-y-auto">
+          <div className="flex items-center justify-between mb-5">
+            <span
+              className="text-[10px] tracking-[0.25em] uppercase"
+              style={{ color: "rgba(232, 201, 122, 0.6)" }}
+            >
+              Edit Task
+            </span>
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close"
+              className="w-7 h-7 rounded-full flex items-center justify-center"
+              style={{
+                border: "1px solid rgba(30, 42, 69, 1)",
+                color: "rgba(240, 236, 228, 0.6)",
+              }}
+            >
+              <span aria-hidden className="text-[14px] leading-none">×</span>
+            </button>
+          </div>
+
+          {/* Title */}
+          <label className="block mb-4">
+            <span
+              className="block text-[11px] tracking-wide mb-2"
+              style={{ color: "rgba(240, 236, 228, 0.5)" }}
+            >
+              Title
+            </span>
+            <textarea
+              autoFocus
+              value={draft.title}
+              onChange={(e) =>
+                setDraft((d) => ({ ...d, title: e.target.value }))
+              }
+              rows={2}
+              className="w-full rounded-lg px-3 py-2.5 text-base outline-none resize-none"
+              style={{
+                background: "rgba(5, 8, 22, 0.6)",
+                border: "1px solid rgba(30, 42, 69, 1)",
+                color: "#F0ECE4",
+                fontFamily: "var(--font-manrope)",
+              }}
+            />
+          </label>
+
+          {/* Status */}
+          <div className="mb-4">
+            <span
+              className="block text-[11px] tracking-wide mb-2"
+              style={{ color: "rgba(240, 236, 228, 0.5)" }}
+            >
+              Status
+            </span>
+            <div className="grid grid-cols-2 gap-2">
+              {STATUS_OPTIONS.map((s) => {
+                const m = STATUS_META[s];
+                const active = task.status === s;
+                return (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => onUpdate(task.id, { status: s })}
+                    className="flex items-center justify-center gap-2 rounded-full py-2.5 text-[12px] tracking-wide transition-all"
+                    style={{
+                      background: active ? m.bg : "rgba(20, 27, 45, 0.5)",
+                      color: active ? m.fg : "rgba(240, 236, 228, 0.55)",
+                      border: `1px solid ${
+                        active ? "rgba(212, 168, 67, 0.4)" : "rgba(30, 42, 69, 1)"
+                      }`,
+                    }}
+                  >
+                    <span
+                      aria-hidden
+                      className="inline-block w-1.5 h-1.5 rounded-full"
+                      style={{ background: m.dot }}
+                    />
+                    {m.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Assignee */}
+          <div className="mb-4">
+            <span
+              className="block text-[11px] tracking-wide mb-2"
+              style={{ color: "rgba(240, 236, 228, 0.5)" }}
+            >
+              Assignee
+            </span>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => onUpdate(task.id, { assignee: null })}
+                className="rounded-full px-3 py-1.5 text-[12px]"
+                style={{
+                  background:
+                    task.assignee === null
+                      ? "rgba(212, 168, 67, 0.12)"
+                      : "rgba(20, 27, 45, 0.5)",
+                  border: `1px solid ${
+                    task.assignee === null
+                      ? "rgba(212, 168, 67, 0.4)"
+                      : "rgba(30, 42, 69, 1)"
+                  }`,
+                  color:
+                    task.assignee === null
+                      ? "#E8C97A"
+                      : "rgba(240, 236, 228, 0.5)",
+                }}
+              >
+                Unassigned
+              </button>
+              {ADMIN_USER_LIST.map((u) => {
+                const active = task.assignee === u;
+                return (
+                  <button
+                    key={u}
+                    type="button"
+                    onClick={() => onUpdate(task.id, { assignee: u })}
+                    className="rounded-full px-3 py-1.5 text-[12px] inline-flex items-center gap-1.5"
+                    style={{
+                      background: active
+                        ? "rgba(212, 168, 67, 0.12)"
+                        : "rgba(20, 27, 45, 0.5)",
+                      border: `1px solid ${
+                        active
+                          ? "rgba(212, 168, 67, 0.4)"
+                          : "rgba(30, 42, 69, 1)"
+                      }`,
+                      color: active ? "#E8C97A" : "rgba(240, 236, 228, 0.7)",
+                    }}
+                  >
+                    <span
+                      className="inline-flex items-center justify-center w-4 h-4 rounded-full text-[9px]"
+                      style={{
+                        background: "rgba(212, 168, 67, 0.18)",
+                        color: "#E8C97A",
+                        fontFamily: "var(--font-newsreader)",
+                      }}
+                    >
+                      {u.charAt(0)}
+                    </span>
+                    {u}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Due date */}
+          <div className="mb-4">
+            <span
+              className="block text-[11px] tracking-wide mb-2"
+              style={{ color: "rgba(240, 236, 228, 0.5)" }}
+            >
+              Due Date
+            </span>
+            <input
+              type="date"
+              value={draft.due_date}
+              onChange={(e) =>
+                setDraft((d) => ({ ...d, due_date: e.target.value }))
+              }
+              className="w-full rounded-lg px-3 py-2.5 text-base outline-none"
+              style={{
+                background: "rgba(5, 8, 22, 0.6)",
+                border: "1px solid rgba(30, 42, 69, 1)",
+                color: "#F0ECE4",
+                colorScheme: "dark",
+                fontFamily: "var(--font-manrope)",
+              }}
+            />
+          </div>
+
+          {/* Description */}
+          <div className="mb-6">
+            <span
+              className="block text-[11px] tracking-wide mb-2"
+              style={{ color: "rgba(240, 236, 228, 0.5)" }}
+            >
+              Notes
+            </span>
+            <textarea
+              value={draft.description}
+              onChange={(e) =>
+                setDraft((d) => ({ ...d, description: e.target.value }))
+              }
+              rows={4}
+              placeholder="Anything that frames this task — links, context, blockers."
+              className="w-full rounded-lg px-3 py-2.5 text-base outline-none"
+              style={{
+                background: "rgba(5, 8, 22, 0.6)",
+                border: "1px solid rgba(30, 42, 69, 1)",
+                color: "#F0ECE4",
+                fontFamily: "var(--font-manrope)",
+              }}
+            />
+          </div>
+
+          {/* Actions */}
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={onSave}
+              className="flex-1 rounded-full py-3 font-display text-[14px] tracking-wide"
+              style={{
+                background: "#D4A843",
+                color: "#050816",
+                fontWeight: 500,
+              }}
+            >
+              Save
+            </button>
+            {confirming ? (
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={onDelete}
+                  className="rounded-full px-4 py-3 text-[12px]"
+                  style={{
+                    background: "#E88C7A",
+                    color: "#050816",
+                    fontWeight: 500,
+                  }}
+                >
+                  Confirm
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirming(false)}
+                  className="rounded-full px-3 py-3 text-[12px]"
+                  style={{ color: "rgba(240, 236, 228, 0.6)" }}
+                >
+                  No
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setConfirming(true)}
+                aria-label="Delete task"
+                className="w-12 h-12 rounded-full flex items-center justify-center"
+                style={{
+                  border: "1px solid rgba(232, 140, 122, 0.4)",
+                  color: "rgba(232, 140, 122, 0.7)",
+                }}
+              >
+                <span aria-hidden className="text-[18px] leading-none">×</span>
+              </button>
+            )}
+          </div>
+        </div>
+      </motion.div>
+    </div>
   );
 }
 

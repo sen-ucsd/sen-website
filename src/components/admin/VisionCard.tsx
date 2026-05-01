@@ -63,11 +63,11 @@ export function VisionCard({ vision, onUpdate }: Props) {
         }}
       />
 
-      <div className="p-7 md:p-10">
-        <div className="flex items-center gap-3 mb-5">
+      <div className="p-5 sm:p-7 md:p-10">
+        <div className="flex items-center gap-3 mb-4 md:mb-5">
           <span
             aria-hidden
-            className="inline-block w-1 h-5"
+            className="inline-block w-1 h-4 md:h-5"
             style={{
               background:
                 "linear-gradient(to bottom, #E8C97A 0%, rgba(160, 124, 46, 0.3) 100%)",
@@ -161,13 +161,13 @@ export function VisionCard({ vision, onUpdate }: Props) {
           <button
             type="button"
             onClick={startEdit}
-            className="text-left w-full group"
+            className="text-left w-full group active:opacity-80 transition-opacity"
           >
             <h2
               className="font-display"
               style={{
-                fontSize: "clamp(24px, 3.5vw, 40px)",
-                lineHeight: 1.1,
+                fontSize: "clamp(20px, 3.5vw, 40px)",
+                lineHeight: 1.15,
                 letterSpacing: "-0.01em",
                 color: "#F0ECE4",
                 fontWeight: 500,
@@ -178,17 +178,17 @@ export function VisionCard({ vision, onUpdate }: Props) {
             </h2>
             {vision.description && (
               <p
-                className="mt-4 text-[15px] md:text-base leading-[1.7] max-w-3xl"
+                className="mt-3 md:mt-4 text-[14px] md:text-base leading-[1.65] md:leading-[1.7] max-w-3xl"
                 style={{ color: "rgba(240, 236, 228, 0.55)" }}
               >
                 {vision.description}
               </p>
             )}
             <span
-              className="inline-block mt-5 text-[11px] tracking-[0.2em] uppercase opacity-0 group-hover:opacity-100 transition-opacity"
+              className="inline-block mt-4 md:mt-5 text-[10px] md:text-[11px] tracking-[0.2em] uppercase md:opacity-0 md:group-hover:opacity-100 transition-opacity"
               style={{ color: "rgba(232, 201, 122, 0.65)" }}
             >
-              Click to edit ↗
+              Tap to edit ↗
             </span>
           </button>
         )}
