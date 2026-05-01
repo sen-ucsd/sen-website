@@ -94,19 +94,32 @@ export default async function ChapterPage({
                 </p>
               </div>
 
-              <div className="mt-16 flex flex-col sm:flex-row items-start sm:items-center gap-5">
+              <div className="mt-16 flex flex-col sm:flex-row items-start sm:items-center gap-5 flex-wrap">
                 {isFounding ? (
-                  <a
-                    href="mailto:sen@ucsd.edu"
-                    className="rounded-full px-8 py-4 font-display text-[15px] tracking-wide transition-all"
-                    style={{
-                      background: "#D4A843",
-                      color: "#050816",
-                      fontWeight: 500,
-                    }}
-                  >
-                    Contact the Chapter
-                  </a>
+                  <>
+                    <a
+                      href="mailto:sen@ucsd.edu"
+                      className="rounded-full px-8 py-4 font-display text-[15px] tracking-wide transition-all"
+                      style={{
+                        background: "#D4A843",
+                        color: "#050816",
+                        fontWeight: 500,
+                      }}
+                    >
+                      Contact the Chapter
+                    </a>
+                    <Link
+                      href="/chapters/san-diego/admin"
+                      className="rounded-full px-7 py-3.5 font-display text-[14px] tracking-wide transition-colors inline-flex items-center gap-2"
+                      style={{
+                        border: "1px solid rgba(212, 168, 67, 0.35)",
+                        color: "#E8C97A",
+                      }}
+                    >
+                      <span aria-hidden>◆</span>
+                      Board Portal
+                    </Link>
+                  </>
                 ) : (
                   <Link
                     href="/apply"
