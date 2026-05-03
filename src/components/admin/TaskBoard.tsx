@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence } from "framer-motion";
 import { supabase } from "@/lib/supabase";
 import { ADMIN_USER_LIST, ASSIGNEE_EVERYONE } from "@/lib/admin-auth";
-import { VisionCard } from "./VisionCard";
+import { BusinessModelCanvas } from "./BusinessModelCanvas";
 import { TaskNode, sortByPriority } from "./TaskNode";
 import { InlineAddTask } from "./InlineAddTask";
 import { BrandedSelect, type SelectOption } from "./BrandedSelect";
@@ -238,10 +238,10 @@ export function TaskBoard({ currentUser }: { currentUser: string }) {
 
   return (
     <div className="space-y-8 md:space-y-12">
-      {/* Vision (root of the WBS) */}
-      {vision && (
-        <VisionCard vision={vision} onUpdate={updateTask} />
-      )}
+      {/* Strategy canvas (formerly the Vision card) — the WBS below ladders
+          up to the boxes here. Vision is still the WBS root in the DB; we
+          just don't surface it as a card anymore. */}
+      <BusinessModelCanvas />
 
       {/* Stats — 3-col compact on mobile, 6-col on desktop */}
       <div className="grid grid-cols-3 lg:grid-cols-6 gap-2 md:gap-3">
