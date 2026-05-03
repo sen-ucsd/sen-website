@@ -194,11 +194,25 @@ export function TaskBoard({ currentUser }: { currentUser: string }) {
   }
 
   async function updateTask(id: string, patch: Partial<Task>) {
+    // Optimistic: reflect the change locally so the UI responds instantly.
+    // Realtime postgres_changes will reconcile when the round-trip lands;
+    // if the write fails we restore the prior row.
+    let prev: Task | undefined;
+    setTasks((curr) => {
+      prev = curr.find((t) => t.id === id);
+      return curr.map((t) => (t.id === id ? { ...t, ...patch } : t));
+    });
     const { error: e } = await supabase
       .from("tasks")
       .update({ ...patch, updated_by: currentUser })
       .eq("id", id);
-    if (e) setError(e.message);
+    if (e) {
+      setError(e.message);
+      if (prev) {
+        const snapshot = prev;
+        setTasks((curr) => curr.map((t) => (t.id === id ? snapshot : t)));
+      }
+    }
   }
 
   async function deleteTask(id: string) {

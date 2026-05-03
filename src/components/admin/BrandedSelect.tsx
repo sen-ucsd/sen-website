@@ -63,7 +63,10 @@ export function BrandedSelect<V extends string>({
 
   const selected = options.find((o) => o.value === value);
 
-  // Position the menu under the trigger
+  // Position the menu under the trigger. The popover uses position: fixed,
+  // so top/left must be viewport-relative — getBoundingClientRect() already
+  // returns viewport coords; do NOT add window.scrollY/X here, or the menu
+  // shifts off-screen by the page scroll amount once the user scrolls down.
   useLayoutEffect(() => {
     if (!open || !triggerRef.current) return;
     const r = triggerRef.current.getBoundingClientRect();
@@ -71,7 +74,7 @@ export function BrandedSelect<V extends string>({
     const desiredLeft = r.left;
     const maxLeft = window.innerWidth - w - 8;
     setMenuPos({
-      top: r.bottom + 6 + window.scrollY,
+      top: r.bottom + 6,
       left: Math.max(8, Math.min(desiredLeft, maxLeft)),
       width: w,
     });
@@ -97,7 +100,7 @@ export function BrandedSelect<V extends string>({
       const r = triggerRef.current.getBoundingClientRect();
       const w = Math.max(menuMinWidth ?? 0, r.width);
       setMenuPos({
-        top: r.bottom + 6 + window.scrollY,
+        top: r.bottom + 6,
         left: r.left,
         width: w,
       });
