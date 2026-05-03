@@ -61,38 +61,70 @@ export function HeroMap() {
   const sd = projected.find((c) => c.id === "san-diego")!;
 
   // Lines: connect every node to its geographic neighbors using Delaunay triangulation.
-  // Iterate every triangle's three edges and dedupe so we get every adjacency exactly once.
+  // To capture adjacencies across the antimeridian (e.g. California ↔ Tokyo, which
+  // are far apart on the flat map but neighbors across the Pacific), we run Delaunay
+  // on the chapter set tiled three times — the original plus copies shifted by ±W.
+  // Each unordered chapter pair keeps its shortest representation, so wrapped pairs
+  // are drawn via the shifted copy with line endpoints that may sit outside [0, W].
+  // Tiling at render time then makes the line appear continuously across the wrap.
   const lines = useMemo(() => {
-    const points: [number, number][] = projected.map((c) => [c.px, c.py]);
-    const delaunay = Delaunay.from(points);
+    const N = projected.length;
+    const augPoints: [number, number][] = [];
+    for (const c of projected) augPoints.push([c.px, c.py]);
+    for (const c of projected) augPoints.push([c.px - WORLD_SVG_W, c.py]);
+    for (const c of projected) augPoints.push([c.px + WORLD_SVG_W, c.py]);
+
+    const delaunay = Delaunay.from(augPoints);
     const { triangles } = delaunay;
-    const seen = new Set<string>();
-    const result: {
+
+    type Edge = {
       from: (typeof projected)[number];
       to: (typeof projected)[number];
+      x1: number;
+      y1: number;
+      x2: number;
+      y2: number;
       key: string;
       isUS: boolean;
-    }[] = [];
+      dist2: number;
+    };
+    const seen = new Map<string, Edge>();
 
     for (let t = 0; t < triangles.length; t += 3) {
       const tri = [triangles[t], triangles[t + 1], triangles[t + 2]];
       for (let k = 0; k < 3; k++) {
-        const a = tri[k];
-        const b = tri[(k + 1) % 3];
-        const lo = Math.min(a, b);
-        const hi = Math.max(a, b);
+        const ai = tri[k];
+        const bi = tri[(k + 1) % 3];
+        // At least one endpoint must be in the central (real) copy, otherwise
+        // we'd just be re-deriving the same edge from a non-central tile.
+        if (ai >= N && bi >= N) continue;
+        const aIdx = ai % N;
+        const bIdx = bi % N;
+        if (aIdx === bIdx) continue;
+        const lo = Math.min(aIdx, bIdx);
+        const hi = Math.max(aIdx, bIdx);
         const key = `${lo}|${hi}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        result.push({
-          from: projected[a],
-          to: projected[b],
+        const aPos = augPoints[ai];
+        const bPos = augPoints[bi];
+        const dx = aPos[0] - bPos[0];
+        const dy = aPos[1] - bPos[1];
+        const dist2 = dx * dx + dy * dy;
+        const existing = seen.get(key);
+        if (existing && existing.dist2 <= dist2) continue;
+        seen.set(key, {
+          from: projected[aIdx],
+          to: projected[bIdx],
+          x1: aPos[0],
+          y1: aPos[1],
+          x2: bPos[0],
+          y2: bPos[1],
           key,
-          isUS: isInUS(projected[a]) && isInUS(projected[b]),
+          isUS: isInUS(projected[aIdx]) && isInUS(projected[bIdx]),
+          dist2,
         });
       }
     }
-    return result;
+    return Array.from(seen.values());
   }, [projected]);
 
   // Camera pull-back: zoom in on San Diego at start, full world at end.
@@ -195,10 +227,10 @@ export function HeroMap() {
                   return (
                     <motion.line
                       key={`${tx}_${l.key}`}
-                      x1={l.from.px}
-                      y1={l.from.py}
-                      x2={l.to.px}
-                      y2={l.to.py}
+                      x1={l.x1}
+                      y1={l.y1}
+                      x2={l.x2}
+                      y2={l.y2}
                       stroke="#E8C97A"
                       strokeWidth={0.9}
                       vectorEffect="non-scaling-stroke"
