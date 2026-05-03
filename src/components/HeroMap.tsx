@@ -165,7 +165,7 @@ export function HeroMap() {
             transition={{
               x: panActive
                 ? {
-                    duration: 30,
+                    duration: 60,
                     repeat: Infinity,
                     ease: "linear",
                     delay: 0.2,
