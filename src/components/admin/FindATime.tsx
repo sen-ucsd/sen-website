@@ -40,7 +40,7 @@ const RANGE_OPTIONS = [
  * board members to consider, then asks /api/calendar/freebusy for mutual
  * availability inside working hours.
  */
-export function FindATime() {
+export function FindATime({ onScheduled }: { onScheduled?: () => void } = {}) {
   const [profiles, setProfiles] = useState<string[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [duration, setDuration] = useState(60);
@@ -50,6 +50,8 @@ export function FindATime() {
   const [pending, setPending] = useState(false);
   const [result, setResult] = useState<FreeBusyResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [schedulingSlot, setSchedulingSlot] = useState<Slot | null>(null);
+  const [scheduledMessage, setScheduledMessage] = useState<string | null>(null);
 
   const tz =
     (typeof Intl !== "undefined" &&
@@ -336,18 +338,22 @@ export function FindATime() {
                       </div>
                       <div className="flex flex-wrap gap-1.5">
                         {slots.map((s, i) => (
-                          <span
+                          <button
                             key={i}
-                            className="inline-block rounded-full px-3 py-1 text-[12px]"
+                            type="button"
+                            onClick={() => setSchedulingSlot(s)}
+                            className="inline-block rounded-full px-3 py-1 text-[12px] transition-colors hover:bg-[rgba(212,168,67,0.16)]"
                             style={{
                               background: "rgba(212, 168, 67, 0.07)",
                               border: "1px solid rgba(212, 168, 67, 0.28)",
-                              color: "rgba(240, 236, 228, 0.88)",
+                              color: "rgba(240, 236, 228, 0.92)",
                               fontFamily: "var(--font-manrope)",
+                              cursor: "pointer",
                             }}
+                            title="Click to schedule this slot"
                           >
                             {formatRange(s.start, s.end, tz)}
-                          </span>
+                          </button>
                         ))}
                       </div>
                     </div>
@@ -357,8 +363,335 @@ export function FindATime() {
             </motion.div>
           )}
         </AnimatePresence>
+
+        {scheduledMessage && (
+          <div
+            className="mt-5 rounded-lg p-3 text-[13px]"
+            style={{
+              background: "rgba(122, 200, 146, 0.08)",
+              border: "1px solid rgba(122, 200, 146, 0.32)",
+              color: "rgba(240, 236, 228, 0.85)",
+            }}
+            role="status"
+          >
+            {scheduledMessage}
+          </div>
+        )}
       </div>
+
+      <ScheduleSlotModal
+        slot={schedulingSlot}
+        attendeeDisplayNames={Array.from(selected)}
+        timeZone={tz}
+        onClose={() => setSchedulingSlot(null)}
+        onScheduled={(msg) => {
+          setSchedulingSlot(null);
+          setScheduledMessage(msg);
+          onScheduled?.();
+        }}
+      />
     </motion.div>
+  );
+}
+
+function ScheduleSlotModal({
+  slot,
+  attendeeDisplayNames,
+  timeZone,
+  onClose,
+  onScheduled,
+}: {
+  slot: Slot | null;
+  attendeeDisplayNames: string[];
+  timeZone: string;
+  onClose: () => void;
+  onScheduled: (msg: string) => void;
+}) {
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [withMeet, setWithMeet] = useState(true);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setTitle("");
+    setDescription("");
+    setError(null);
+  }, [slot]);
+
+  useEffect(() => {
+    if (!slot) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [slot, onClose]);
+
+  if (!slot) return null;
+
+  async function handleSchedule(e: React.FormEvent) {
+    e.preventDefault();
+    if (!slot) return;
+    if (!title.trim()) {
+      setError("Give the event a title.");
+      return;
+    }
+    setPending(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/calendar/schedule", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          attendeeDisplayNames,
+          title: title.trim(),
+          description: description.trim() || undefined,
+          startIso: slot.start,
+          endIso: slot.end,
+          timeZone,
+          withMeet,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        if (data.error === "scope_missing") {
+          setError(
+            "Your calendar connection needs the new write scope. Disconnect and reconnect once, then try again."
+          );
+        } else if (data.error === "organizer_not_connected") {
+          setError("Connect your own Google Calendar before scheduling.");
+        } else {
+          setError(data.detail || data.error || "Couldn't schedule.");
+        }
+        setPending(false);
+        return;
+      }
+      const notConnected: string[] = data.notConnected ?? [];
+      const lines = [
+        `Scheduled. Invitations went out to ${data.invitedEmails.length} attendee(s).`,
+      ];
+      if (notConnected.length > 0) {
+        lines.push(
+          `Note: ${notConnected.join(
+            ", "
+          )} aren't connected to Google Calendar so they were skipped.`
+        );
+      }
+      if (data.meetLink) {
+        lines.push(`Meet link: ${data.meetLink}`);
+      }
+      onScheduled(lines.join(" "));
+    } catch (e2) {
+      setError(e2 instanceof Error ? e2.message : String(e2));
+      setPending(false);
+    }
+  }
+
+  const startDate = new Date(slot.start);
+  const endDate = new Date(slot.end);
+  const dayLabel = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    weekday: "long",
+    month: "short",
+    day: "numeric",
+  }).format(startDate);
+  const timeFmt = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+  const timeLabel = `${timeFmt.format(startDate)} – ${timeFmt.format(endDate)}`;
+
+  return (
+    <AnimatePresence>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.18 }}
+        onClick={onClose}
+        className="fixed inset-0 z-[200] flex items-center justify-center p-4"
+        style={{ background: "rgba(5, 8, 22, 0.78)", backdropFilter: "blur(8px)" }}
+      >
+        <motion.form
+          onSubmit={handleSchedule}
+          onClick={(e) => e.stopPropagation()}
+          initial={{ opacity: 0, y: 12, scale: 0.98 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, y: 8, scale: 0.98 }}
+          transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+          className="w-full max-w-md rounded-2xl"
+          style={{
+            background: "#0A0E1A",
+            border: "1px solid rgba(212, 168, 67, 0.32)",
+            boxShadow: "0 30px 80px rgba(0,0,0,0.5)",
+          }}
+        >
+          <div className="p-6 sm:p-7">
+            <div className="flex items-center gap-3 mb-4">
+              <span
+                aria-hidden
+                className="inline-block w-1 h-4"
+                style={{
+                  background:
+                    "linear-gradient(to bottom, #E8C97A 0%, rgba(160, 124, 46, 0.3) 100%)",
+                }}
+              />
+              <span
+                className="text-eyebrow"
+                style={{ color: "rgba(232, 201, 122, 0.7)" }}
+              >
+                Schedule this slot
+              </span>
+            </div>
+            <p
+              className="text-[15px] leading-[1.5] mb-1"
+              style={{ color: "rgba(240, 236, 228, 0.85)" }}
+            >
+              {dayLabel}
+            </p>
+            <p
+              className="font-display text-[20px]"
+              style={{
+                color: "#E8C97A",
+                fontFamily: "var(--font-newsreader)",
+                fontWeight: 500,
+              }}
+            >
+              {timeLabel}
+            </p>
+            <p
+              className="text-[12px] mt-2"
+              style={{ color: "rgba(240, 236, 228, 0.5)" }}
+            >
+              Inviting{" "}
+              {attendeeDisplayNames.length > 0
+                ? attendeeDisplayNames.join(", ")
+                : "you (no other attendees)"}
+              .
+            </p>
+
+            <div className="mt-5 space-y-4">
+              <label className="block">
+                <span
+                  className="text-[12px] tracking-wide block mb-2"
+                  style={{ color: "rgba(240, 236, 228, 0.55)" }}
+                >
+                  Title
+                </span>
+                <input
+                  autoFocus
+                  type="text"
+                  required
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="Board sync"
+                  className="w-full rounded-lg px-3.5 py-2.5 outline-none text-[14px]"
+                  style={{
+                    background: "rgba(20, 27, 45, 0.55)",
+                    border: "1px solid rgba(30, 42, 69, 1)",
+                    color: "#F0ECE4",
+                    fontFamily: "var(--font-manrope)",
+                  }}
+                />
+              </label>
+              <label className="block">
+                <span
+                  className="text-[12px] tracking-wide block mb-2"
+                  style={{ color: "rgba(240, 236, 228, 0.55)" }}
+                >
+                  Description (optional)
+                </span>
+                <textarea
+                  rows={3}
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="What's the agenda?"
+                  className="w-full rounded-lg px-3.5 py-2.5 outline-none text-[13.5px] resize-none"
+                  style={{
+                    background: "rgba(20, 27, 45, 0.55)",
+                    border: "1px solid rgba(30, 42, 69, 1)",
+                    color: "#F0ECE4",
+                    fontFamily: "var(--font-manrope)",
+                  }}
+                />
+              </label>
+              <label className="flex items-center gap-2.5 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={withMeet}
+                  onChange={(e) => setWithMeet(e.target.checked)}
+                  className="appearance-none w-4 h-4 rounded relative"
+                  style={{
+                    background: withMeet
+                      ? "#D4A843"
+                      : "rgba(20, 27, 45, 0.55)",
+                    border: `1px solid ${
+                      withMeet
+                        ? "#D4A843"
+                        : "rgba(30, 42, 69, 1)"
+                    }`,
+                  }}
+                />
+                <span
+                  className="text-[13px]"
+                  style={{ color: "rgba(240, 236, 228, 0.7)" }}
+                >
+                  Add a Google Meet link
+                </span>
+              </label>
+            </div>
+
+            {error && (
+              <p
+                className="mt-4 text-[13px]"
+                style={{ color: "#E8A35E" }}
+                role="alert"
+              >
+                {error}
+              </p>
+            )}
+
+            <div className="mt-6 flex items-center gap-2 justify-end">
+              <button
+                type="button"
+                onClick={onClose}
+                disabled={pending}
+                className="rounded-full px-4 py-2 text-[12px] tracking-wide disabled:opacity-50"
+                style={{
+                  border: "1px solid rgba(30, 42, 69, 1)",
+                  color: "rgba(240, 236, 228, 0.7)",
+                }}
+              >
+                Cancel
+              </button>
+              <motion.button
+                type="submit"
+                disabled={pending || !title.trim()}
+                whileHover={
+                  !pending && title.trim()
+                    ? { scale: 1.02, boxShadow: "0 0 24px rgba(212,168,67,0.3)" }
+                    : undefined
+                }
+                whileTap={
+                  !pending && title.trim() ? { scale: 0.98 } : undefined
+                }
+                className="rounded-full px-5 py-2 text-[13px] tracking-wide font-display disabled:opacity-50 disabled:cursor-not-allowed"
+                style={{
+                  background: "#D4A843",
+                  color: "#050816",
+                  fontWeight: 500,
+                }}
+              >
+                {pending ? "Scheduling…" : "Schedule"}
+              </motion.button>
+            </div>
+          </div>
+        </motion.form>
+      </motion.div>
+    </AnimatePresence>
   );
 }
 

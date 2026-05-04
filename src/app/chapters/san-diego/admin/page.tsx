@@ -2,7 +2,7 @@ import Link from "next/link";
 import { getCurrentAdmin, logoutAction } from "./actions";
 import { TaskBoard } from "@/components/admin/TaskBoard";
 import { CalendarConnectButton } from "@/components/admin/CalendarConnectButton";
-import { FindATime } from "@/components/admin/FindATime";
+import { SchedulingPanel } from "@/components/admin/SchedulingPanel";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Board Portal · San Diego · SEN" };
@@ -112,7 +112,7 @@ export default async function AdminDashboard() {
         </div>
 
         <div className="mb-8 md:mb-12">
-          <FindATime />
+          <SchedulingPanel />
         </div>
 
         <TaskBoard currentUser={displayName} />

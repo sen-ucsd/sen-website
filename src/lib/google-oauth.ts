@@ -16,7 +16,9 @@ export const SCOPES = [
   "openid",
   "https://www.googleapis.com/auth/userinfo.email",
   "https://www.googleapis.com/auth/userinfo.profile",
-  "https://www.googleapis.com/auth/calendar.readonly",
+  // calendar.events covers both reading (free-busy) and writing
+  // (creating SEN events with attendees). It supersedes calendar.readonly.
+  "https://www.googleapis.com/auth/calendar.events",
 ];
 
 export interface OAuthEnv {
@@ -168,6 +170,72 @@ export interface FreeBusySlot {
 
 export interface FreeBusyResponse {
   calendars: Record<string, { busy: FreeBusySlot[]; errors?: unknown[] }>;
+}
+
+const EVENTS_URL = "https://www.googleapis.com/calendar/v3/calendars/primary/events";
+
+export interface CreatedEvent {
+  id: string;
+  htmlLink: string;
+  hangoutLink?: string;
+  summary?: string;
+  description?: string;
+  start: { dateTime: string; timeZone?: string };
+  end: { dateTime: string; timeZone?: string };
+  attendees?: { email: string; displayName?: string; responseStatus?: string }[];
+}
+
+export async function createCalendarEvent(opts: {
+  accessToken: string;
+  summary: string;
+  description?: string;
+  start: { dateTime: string; timeZone: string };
+  end: { dateTime: string; timeZone: string };
+  attendees: string[];
+  /** When true, ask Google to mint a Meet link. */
+  withMeet?: boolean;
+  /** Optional opaque tag we can grep for later when listing chapter events. */
+  extendedPrivate?: Record<string, string>;
+}): Promise<CreatedEvent> {
+  const params = new URLSearchParams({ sendUpdates: "all" });
+  if (opts.withMeet) params.set("conferenceDataVersion", "1");
+
+  const body: Record<string, unknown> = {
+    summary: opts.summary,
+    description: opts.description,
+    start: opts.start,
+    end: opts.end,
+    attendees: opts.attendees.map((email) => ({ email })),
+  };
+  if (opts.extendedPrivate) {
+    body.extendedProperties = { private: opts.extendedPrivate };
+  }
+  if (opts.withMeet) {
+    body.conferenceData = {
+      createRequest: {
+        requestId: cryptoRandomId(),
+        conferenceSolutionKey: { type: "hangoutsMeet" },
+      },
+    };
+  }
+
+  const res = await fetch(`${EVENTS_URL}?${params.toString()}`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${opts.accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Google events.insert failed: ${res.status} ${text}`);
+  }
+  return (await res.json()) as CreatedEvent;
+}
+
+function cryptoRandomId() {
+  return crypto.randomBytes(16).toString("hex");
 }
 
 export async function queryFreeBusy(opts: {
