@@ -703,8 +703,20 @@ function ParticipantSummary({
   const notConnected = participants.filter((p) => p.status === "not_connected");
   const errored = participants.filter((p) => p.status === "error");
   if (notConnected.length === 0 && errored.length === 0) return null;
+
+  // Detect the "old token doesn't have read scope" case so we can give a
+  // useful nudge instead of just dumping the raw 403 string.
+  const looksLikeScopeIssue = errored.some((p) => {
+    const msg = (p.error ?? "").toLowerCase();
+    return (
+      msg.includes("403") ||
+      msg.includes("insufficient") ||
+      msg.includes("invalid_grant")
+    );
+  });
+
   return (
-    <div className="space-y-1 mb-2">
+    <div className="space-y-2 mb-2">
       {notConnected.length > 0 && (
         <p className="text-[12px]" style={{ color: "rgba(240, 236, 228, 0.5)" }}>
           Not yet connected to Google Calendar:{" "}
@@ -715,10 +727,35 @@ function ParticipantSummary({
         </p>
       )}
       {errored.length > 0 && (
-        <p className="text-[12px]" style={{ color: "#E8A35E" }}>
-          Couldn't reach calendar for{" "}
-          {errored.map((p) => p.displayName).join(", ")}.
-        </p>
+        <div className="space-y-1">
+          <p className="text-[12px]" style={{ color: "#E8A35E" }}>
+            Couldn't reach calendar for{" "}
+            {errored.map((p) => p.displayName).join(", ")}.
+          </p>
+          {looksLikeScopeIssue ? (
+            <p
+              className="text-[11.5px] leading-[1.55]"
+              style={{ color: "rgba(240, 236, 228, 0.55)" }}
+            >
+              The connection looks like it doesn't have the read scope yet.
+              Disconnect (× on the Calendar pill in the header) and reconnect
+              once — the new consent screen will request both read and write
+              access.
+            </p>
+          ) : (
+            errored
+              .filter((p) => p.error)
+              .map((p, i) => (
+                <p
+                  key={i}
+                  className="text-[11px] leading-[1.55] font-mono"
+                  style={{ color: "rgba(240, 236, 228, 0.4)" }}
+                >
+                  {p.displayName}: {p.error}
+                </p>
+              ))
+          )}
+        </div>
       )}
     </div>
   );

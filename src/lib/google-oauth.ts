@@ -16,8 +16,12 @@ export const SCOPES = [
   "openid",
   "https://www.googleapis.com/auth/userinfo.email",
   "https://www.googleapis.com/auth/userinfo.profile",
-  // calendar.events covers both reading (free-busy) and writing
-  // (creating SEN events with attendees). It supersedes calendar.readonly.
+  // Two calendar scopes because Google splits the surfaces we need:
+  //   calendar.readonly  → required for freeBusy.query (and reading events)
+  //   calendar.events    → required for events.insert (creating with attendees)
+  // The narrower calendar.events.freebusy exists but is newer and not all
+  // accounts have it enabled, so we use the well-supported pair.
+  "https://www.googleapis.com/auth/calendar.readonly",
   "https://www.googleapis.com/auth/calendar.events",
 ];
 

@@ -156,11 +156,16 @@ export async function POST(req: NextRequest) {
           googleEmail: conn.google_email,
         });
       } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error(
+          `freebusy failed for ${name} (${conn.google_email}):`,
+          msg
+        );
         participantResults.push({
           displayName: name,
           status: "error",
           googleEmail: conn.google_email,
-          error: e instanceof Error ? e.message : String(e),
+          error: msg,
         });
       }
     }
