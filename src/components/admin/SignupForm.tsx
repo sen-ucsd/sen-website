@@ -101,7 +101,7 @@ export function SignupForm() {
               onChange={(e) => setDisplayName(e.target.value)}
               className={inputClass}
               style={inputStyle}
-              placeholder="Aryan"
+              placeholder="First name or how the board calls you"
             />
           </Field>
 
