@@ -6,10 +6,41 @@ export const alt = "SEN — A global network of student builders.";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
-export default async function Image() {
-  const logo = await readFile(
-    join(process.cwd(), "public/SEN_Logo_cropped.png")
+const EYEBROW = "BORN IN SAN DIEGO";
+const WORDMARK = "SEN";
+const TAGLINE = "A global network of student builders.";
+
+// Pull a single weight from Google Fonts as TTF so satori (the renderer
+// behind next/og) can use it. Passing `text=` makes Google return only the
+// glyphs we need, which keeps the request small and ensures a TTF response.
+async function loadGoogleFont(family: string, weight: number, text: string) {
+  const url = `https://fonts.googleapis.com/css2?family=${family.replace(
+    / /g,
+    "+"
+  )}:wght@${weight}&text=${encodeURIComponent(text)}`;
+  const css = await fetch(url).then((r) => r.text());
+  const match = css.match(
+    /src: url\((.+?)\) format\('(opentype|truetype)'\)/
   );
+  if (!match) {
+    throw new Error(`Failed to extract font URL for ${family} ${weight}`);
+  }
+  const fontRes = await fetch(match[1]);
+  if (!fontRes.ok) {
+    throw new Error(
+      `Failed to fetch ${family} ${weight}: HTTP ${fontRes.status}`
+    );
+  }
+  return fontRes.arrayBuffer();
+}
+
+export default async function Image() {
+  const [logo, newsreader500, manrope500, manrope400] = await Promise.all([
+    readFile(join(process.cwd(), "public/SEN_Logo_cropped.png")),
+    loadGoogleFont("Newsreader", 500, WORDMARK),
+    loadGoogleFont("Manrope", 500, EYEBROW),
+    loadGoogleFont("Manrope", 400, TAGLINE),
+  ]);
   const logoSrc = `data:image/png;base64,${logo.toString("base64")}`;
 
   return new ImageResponse(
@@ -24,7 +55,7 @@ export default async function Image() {
           justifyContent: "flex-start",
           position: "relative",
           padding: "0 96px",
-          fontFamily: "serif",
+          fontFamily: "Newsreader, serif",
         }}
       >
         <div
@@ -85,17 +116,20 @@ export default async function Image() {
           >
             <div
               style={{
-                fontFamily: "sans-serif",
+                fontFamily: "Manrope, sans-serif",
+                fontWeight: 500,
                 fontSize: 22,
                 color: "rgba(232, 201, 122, 0.92)",
                 letterSpacing: "0.32em",
                 textTransform: "uppercase",
               }}
             >
-              Born in San Diego
+              {EYEBROW}
             </div>
             <div
               style={{
+                fontFamily: "Newsreader, serif",
+                fontWeight: 500,
                 fontSize: 124,
                 color: "#F0ECE4",
                 lineHeight: 0.95,
@@ -103,23 +137,46 @@ export default async function Image() {
                 marginTop: 24,
               }}
             >
-              SEN
+              {WORDMARK}
             </div>
             <div
               style={{
-                fontFamily: "sans-serif",
+                fontFamily: "Manrope, sans-serif",
+                fontWeight: 400,
                 fontSize: 34,
                 color: "rgba(240, 236, 228, 0.72)",
                 lineHeight: 1.25,
                 marginTop: 28,
               }}
             >
-              A global network of student builders.
+              {TAGLINE}
             </div>
           </div>
         </div>
       </div>
     ),
-    { ...size }
+    {
+      ...size,
+      fonts: [
+        {
+          name: "Newsreader",
+          data: newsreader500,
+          weight: 500,
+          style: "normal",
+        },
+        {
+          name: "Manrope",
+          data: manrope500,
+          weight: 500,
+          style: "normal",
+        },
+        {
+          name: "Manrope",
+          data: manrope400,
+          weight: 400,
+          style: "normal",
+        },
+      ],
+    }
   );
 }
