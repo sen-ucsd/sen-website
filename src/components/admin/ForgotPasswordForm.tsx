@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { getSupabaseBrowser } from "@/lib/supabase-browser";
+import { OtpInput } from "./OtpInput";
 
 const ADMIN_BASE = "/chapters/san-diego/admin";
 
@@ -148,24 +149,7 @@ export function ForgotPasswordForm() {
           </p>
 
           <Field label="Reset code">
-            <input
-              type="text"
-              required
-              autoFocus
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              pattern="\\d{6}"
-              maxLength={6}
-              value={otp}
-              onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
-              className={`${inputClass} text-center tracking-[0.4em]`}
-              style={{
-                ...inputStyle,
-                fontFamily: "var(--font-newsreader)",
-                fontSize: 24,
-              }}
-              placeholder="000000"
-            />
+            <OtpInput value={otp} onChange={setOtp} autoFocus />
           </Field>
 
           <Field label="New password" hint="At least 8 characters.">
