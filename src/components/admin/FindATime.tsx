@@ -45,8 +45,8 @@ export function FindATime() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [duration, setDuration] = useState(60);
   const [rangeDays, setRangeDays] = useState(14);
-  const [startHour, setStartHour] = useState(9);
-  const [endHour, setEndHour] = useState(17);
+  const [startHour, setStartHour] = useState(10);
+  const [endHour, setEndHour] = useState(20);
   const [pending, setPending] = useState(false);
   const [result, setResult] = useState<FreeBusyResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
