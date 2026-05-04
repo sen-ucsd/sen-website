@@ -106,17 +106,10 @@ export function LoginForm({ next }: { next?: string }) {
       </motion.button>
 
       <p
-        className="text-[13px] text-center pt-2"
-        style={{ color: "rgba(240, 236, 228, 0.5)" }}
+        className="text-[12px] text-center pt-2"
+        style={{ color: "rgba(240, 236, 228, 0.35)" }}
       >
-        New to the board?{" "}
-        <Link
-          href={`${ADMIN_BASE}/signup`}
-          className="underline-offset-4 hover:underline"
-          style={{ color: "#E8C97A" }}
-        >
-          Create an account
-        </Link>
+        Exec only. By invite.
       </p>
     </form>
   );
