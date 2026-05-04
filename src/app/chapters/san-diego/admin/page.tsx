@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { getCurrentAdmin, logoutAction } from "./actions";
 import { TaskBoard } from "@/components/admin/TaskBoard";
+import { CalendarConnectButton } from "@/components/admin/CalendarConnectButton";
+import { FindATime } from "@/components/admin/FindATime";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Board Portal · San Diego · SEN" };
@@ -41,6 +43,9 @@ export default async function AdminDashboard() {
           <span className="sm:hidden">Board Portal</span>
         </p>
         <div className="ml-auto flex items-center gap-2">
+          <div className="hidden md:inline-flex">
+            <CalendarConnectButton />
+          </div>
           {/* Avatar pill on mobile, full text on desktop */}
           <span
             className="hidden md:inline text-[12px]"
@@ -98,6 +103,16 @@ export default async function AdminDashboard() {
             children, assign it, set a due date, and walk it across the status
             line.
           </p>
+        </div>
+
+        {/* Mobile/tablet: connect button rides at the top of the body, since
+            the header version is desktop-only. */}
+        <div className="md:hidden mb-6">
+          <CalendarConnectButton />
+        </div>
+
+        <div className="mb-8 md:mb-12">
+          <FindATime />
         </div>
 
         <TaskBoard currentUser={displayName} />
