@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { getSupabaseBrowser } from "@/lib/supabase-browser";
 
@@ -381,6 +381,7 @@ export function FindATime({ onScheduled }: { onScheduled?: () => void } = {}) {
 
       <ScheduleSlotModal
         slot={schedulingSlot}
+        durationMinutes={duration}
         attendeeDisplayNames={Array.from(selected)}
         timeZone={tz}
         onClose={() => setSchedulingSlot(null)}
@@ -396,12 +397,14 @@ export function FindATime({ onScheduled }: { onScheduled?: () => void } = {}) {
 
 function ScheduleSlotModal({
   slot,
+  durationMinutes,
   attendeeDisplayNames,
   timeZone,
   onClose,
   onScheduled,
 }: {
   slot: Slot | null;
+  durationMinutes: number;
   attendeeDisplayNames: string[];
   timeZone: string;
   onClose: () => void;
@@ -412,11 +415,16 @@ function ScheduleSlotModal({
   const [withMeet, setWithMeet] = useState(true);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Selected start time inside the free window. The user drags to position
+  // a duration-sized block; we book exactly that range, not the whole window.
+  const [selectedStartMs, setSelectedStartMs] = useState<number | null>(null);
 
   useEffect(() => {
     setTitle("");
     setDescription("");
     setError(null);
+    if (slot) setSelectedStartMs(new Date(slot.start).getTime());
+    else setSelectedStartMs(null);
   }, [slot]);
 
   useEffect(() => {
@@ -429,6 +437,12 @@ function ScheduleSlotModal({
   }, [slot, onClose]);
 
   if (!slot) return null;
+
+  const durationMs = durationMinutes * 60_000;
+  const freeStartMs = new Date(slot.start).getTime();
+  const freeEndMs = new Date(slot.end).getTime();
+  const startMs = selectedStartMs ?? freeStartMs;
+  const endMs = startMs + durationMs;
 
   async function handleSchedule(e: React.FormEvent) {
     e.preventDefault();
@@ -447,8 +461,8 @@ function ScheduleSlotModal({
           attendeeDisplayNames,
           title: title.trim(),
           description: description.trim() || undefined,
-          startIso: slot.start,
-          endIso: slot.end,
+          startIso: new Date(startMs).toISOString(),
+          endIso: new Date(endMs).toISOString(),
           timeZone,
           withMeet,
         }),
@@ -488,8 +502,8 @@ function ScheduleSlotModal({
     }
   }
 
-  const startDate = new Date(slot.start);
-  const endDate = new Date(slot.end);
+  const startDate = new Date(startMs);
+  const endDate = new Date(endMs);
   const dayLabel = new Intl.DateTimeFormat("en-US", {
     timeZone,
     weekday: "long",
@@ -503,6 +517,9 @@ function ScheduleSlotModal({
     hour12: true,
   });
   const timeLabel = `${timeFmt.format(startDate)} – ${timeFmt.format(endDate)}`;
+  const freeWindowLabel = `${timeFmt.format(
+    new Date(freeStartMs)
+  )} – ${timeFmt.format(new Date(freeEndMs))}`;
 
   return (
     <AnimatePresence>
@@ -564,6 +581,23 @@ function ScheduleSlotModal({
             </p>
             <p
               className="text-[12px] mt-2"
+              style={{ color: "rgba(240, 236, 228, 0.5)" }}
+            >
+              Everyone's free between {freeWindowLabel}. Drag the gold block
+              below to choose a {durationMinutes}-minute window inside it.
+            </p>
+
+            <DurationPicker
+              freeStartMs={freeStartMs}
+              freeEndMs={freeEndMs}
+              durationMs={durationMs}
+              startMs={startMs}
+              onChange={setSelectedStartMs}
+              timeZone={timeZone}
+            />
+
+            <p
+              className="text-[12px] mt-3"
               style={{ color: "rgba(240, 236, 228, 0.5)" }}
             >
               Inviting{" "}
@@ -830,4 +864,222 @@ function formatRange(start: string, end: string, tz: string): string {
     hour12: true,
   });
   return `${fmt.format(new Date(start))} – ${fmt.format(new Date(end))}`;
+}
+
+// Snap dragged-or-clicked positions to 15-minute boundaries.
+const SNAP_MS = 15 * 60_000;
+
+/**
+ * Horizontal "drag to position" picker. The track represents the entire
+ * mutual-free window; the gold block on it is the meeting we'll actually
+ * schedule. Clicking the track centers the block on the click; dragging
+ * the block moves it. Snaps to 15-minute boundaries.
+ */
+function DurationPicker({
+  freeStartMs,
+  freeEndMs,
+  durationMs,
+  startMs,
+  onChange,
+  timeZone,
+}: {
+  freeStartMs: number;
+  freeEndMs: number;
+  durationMs: number;
+  startMs: number;
+  onChange: (newStartMs: number) => void;
+  timeZone: string;
+}) {
+  const trackRef = useRef<HTMLDivElement>(null);
+  const dragRef = useRef<{
+    pointerId: number;
+    pointerX: number;
+    startMs: number;
+  } | null>(null);
+  const [dragging, setDragging] = useState(false);
+
+  const freeRange = freeEndMs - freeStartMs;
+  const maxStartMs = freeEndMs - durationMs;
+  const draggable = maxStartMs > freeStartMs;
+
+  function clampStart(ms: number): number {
+    if (ms < freeStartMs) return freeStartMs;
+    if (ms > maxStartMs) return maxStartMs;
+    return ms;
+  }
+  function snapStart(ms: number): number {
+    return Math.round(ms / SNAP_MS) * SNAP_MS;
+  }
+  function commit(ms: number) {
+    onChange(clampStart(snapStart(ms)));
+  }
+
+  const leftPct = ((startMs - freeStartMs) / freeRange) * 100;
+  const widthPct = (durationMs / freeRange) * 100;
+
+  function handleTrackPointerDown(e: React.PointerEvent<HTMLDivElement>) {
+    if (!trackRef.current || !draggable) return;
+    const rect = trackRef.current.getBoundingClientRect();
+    const ratio = (e.clientX - rect.left) / rect.width;
+    // Center the duration block on the click position
+    const centerMs = freeStartMs + ratio * freeRange;
+    commit(centerMs - durationMs / 2);
+  }
+
+  function handleHandlePointerDown(e: React.PointerEvent<HTMLDivElement>) {
+    if (!draggable) return;
+    e.stopPropagation();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    dragRef.current = {
+      pointerId: e.pointerId,
+      pointerX: e.clientX,
+      startMs,
+    };
+    setDragging(true);
+  }
+  function handleHandlePointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    if (!dragRef.current || !trackRef.current) return;
+    const trackWidth = trackRef.current.getBoundingClientRect().width;
+    if (trackWidth <= 0) return;
+    const deltaPx = e.clientX - dragRef.current.pointerX;
+    const deltaMs = (deltaPx / trackWidth) * freeRange;
+    commit(dragRef.current.startMs + deltaMs);
+  }
+  function handleHandlePointerUp(e: React.PointerEvent<HTMLDivElement>) {
+    if (!dragRef.current) return;
+    e.currentTarget.releasePointerCapture(dragRef.current.pointerId);
+    dragRef.current = null;
+    setDragging(false);
+  }
+
+  // Tick labels at the start, the middle, and the end of the free window.
+  const fmt = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+  const midMs = freeStartMs + freeRange / 2;
+  const showMid = freeRange >= 2 * 60 * 60_000; // only if window > 2h
+
+  return (
+    <div className="mt-4 select-none">
+      <div className="flex items-center justify-between gap-2 mb-1.5 text-[10px] tracking-[0.18em] uppercase">
+        <span style={{ color: "rgba(232, 201, 122, 0.55)" }}>
+          {fmt.format(new Date(freeStartMs))}
+        </span>
+        {showMid && (
+          <span style={{ color: "rgba(240, 236, 228, 0.32)" }}>
+            {fmt.format(new Date(midMs))}
+          </span>
+        )}
+        <span style={{ color: "rgba(232, 201, 122, 0.55)" }}>
+          {fmt.format(new Date(freeEndMs))}
+        </span>
+      </div>
+
+      <div
+        ref={trackRef}
+        onPointerDown={handleTrackPointerDown}
+        className="relative w-full rounded-full"
+        style={{
+          height: 40,
+          background: "rgba(212, 168, 67, 0.08)",
+          border: "1px solid rgba(212, 168, 67, 0.25)",
+          cursor: draggable ? "pointer" : "default",
+          touchAction: "none",
+        }}
+        role="slider"
+        aria-label="Choose a meeting time within this free window"
+        aria-valuemin={freeStartMs}
+        aria-valuemax={maxStartMs}
+        aria-valuenow={startMs}
+      >
+        {/* Subtle 30-min grid */}
+        <GridTicks
+          freeStartMs={freeStartMs}
+          freeEndMs={freeEndMs}
+          stepMs={30 * 60_000}
+        />
+
+        <div
+          onPointerDown={handleHandlePointerDown}
+          onPointerMove={handleHandlePointerMove}
+          onPointerUp={handleHandlePointerUp}
+          onPointerCancel={handleHandlePointerUp}
+          className="absolute top-0 bottom-0 rounded-full flex items-center justify-center"
+          style={{
+            left: `${leftPct}%`,
+            width: `${widthPct}%`,
+            minWidth: 36,
+            background: dragging
+              ? "linear-gradient(180deg, #E8C97A 0%, #D4A843 100%)"
+              : "linear-gradient(180deg, #D4A843 0%, #B68B2E 100%)",
+            border: "1px solid rgba(232, 201, 122, 0.7)",
+            boxShadow: dragging
+              ? "0 0 0 2px rgba(212,168,67,0.25), 0 6px 24px rgba(212,168,67,0.4)"
+              : "0 2px 14px rgba(212,168,67,0.25)",
+            cursor: draggable ? (dragging ? "grabbing" : "grab") : "default",
+            transition: dragging ? "none" : "background 160ms ease",
+            touchAction: "none",
+          }}
+        >
+          <span
+            aria-hidden
+            style={{
+              width: 18,
+              height: 4,
+              borderRadius: 2,
+              background: "rgba(5, 8, 22, 0.55)",
+            }}
+          />
+        </div>
+      </div>
+
+      {!draggable && (
+        <p
+          className="text-[11px] mt-2"
+          style={{ color: "rgba(240, 236, 228, 0.4)" }}
+        >
+          The free window is exactly the meeting length, so there's nothing to
+          adjust.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function GridTicks({
+  freeStartMs,
+  freeEndMs,
+  stepMs,
+}: {
+  freeStartMs: number;
+  freeEndMs: number;
+  stepMs: number;
+}) {
+  const range = freeEndMs - freeStartMs;
+  // Don't bother drawing more than 24 ticks — gets noisy.
+  const count = Math.min(Math.floor(range / stepMs), 24);
+  if (count < 2) return null;
+  const ticks: number[] = [];
+  for (let i = 1; i < count; i++) ticks.push(i / count);
+  return (
+    <>
+      {ticks.map((pct, i) => (
+        <span
+          key={i}
+          aria-hidden
+          className="absolute top-1/2"
+          style={{
+            left: `${pct * 100}%`,
+            width: 1,
+            height: 8,
+            transform: "translate(-0.5px, -50%)",
+            background: "rgba(212, 168, 67, 0.22)",
+          }}
+        />
+      ))}
+    </>
+  );
 }

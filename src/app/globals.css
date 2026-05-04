@@ -52,6 +52,29 @@ body {
   color: #f0ece4;
 }
 
+/* Tailwind v4 dropped the historical `cursor: pointer` default on buttons.
+   Restore the expected behavior so every interactive control feels clickable
+   without sprinkling cursor-pointer through every component. */
+button:not(:disabled),
+[role="button"]:not([aria-disabled="true"]),
+summary,
+label[for],
+input[type="submit"]:not(:disabled),
+input[type="reset"]:not(:disabled),
+input[type="button"]:not(:disabled),
+input[type="checkbox"]:not(:disabled),
+input[type="radio"]:not(:disabled),
+select:not(:disabled),
+a[href] {
+  cursor: pointer;
+}
+button:disabled,
+[role="button"][aria-disabled="true"],
+input:disabled,
+select:disabled {
+  cursor: not-allowed;
+}
+
 ::-webkit-scrollbar {
   width: 6px;
 }
