@@ -1,20 +1,9 @@
 /**
- * Hardcoded admin credentials for the San Diego chapter exec board.
- * Replace with Supabase Auth once we're ready to roll out real accounts.
+ * Sentinel assignee meaning "the whole board". Treated as "yours" for every
+ * signed-in user, so whole-board tasks surface in everyone's queue.
+ *
+ * Real admin users now live in Supabase Auth (auth.users) with a mirror in
+ * public.profiles. Fetch the list of display names from that table at runtime
+ * instead of importing a hardcoded array here.
  */
-export const ADMIN_USERS: Record<string, string> = {
-  Aryan: "SEN",
-  Shawn: "SEN",
-  Jesse: "SEN",
-  Tristin: "SEN",
-  Irene: "SEN",
-  Andre: "SEN",
-};
-
-export const ADMIN_USER_LIST = Object.keys(ADMIN_USERS);
-
-/** Sentinel assignee meaning "the whole board". Treated as "yours" for every user. */
 export const ASSIGNEE_EVERYONE = "Everyone";
-
-export const ADMIN_COOKIE_NAME = "sen_admin_user";
-export const ADMIN_COOKIE_MAX_AGE = 60 * 60 * 24 * 14; // 14 days

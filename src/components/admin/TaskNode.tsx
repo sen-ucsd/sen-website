@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { TaskStatus, TaskWithChildren, Task } from "./TaskBoard";
-import { ADMIN_USER_LIST, ASSIGNEE_EVERYONE } from "@/lib/admin-auth";
+import { ASSIGNEE_EVERYONE } from "@/lib/admin-auth";
 import { InlineAddTask } from "./InlineAddTask";
 import { BrandedSelect, type SelectOption } from "./BrandedSelect";
 
@@ -45,27 +45,32 @@ const STATUS_OPTIONS: SelectOption<TaskStatus>[] = (["todo", "in_progress", "don
   })
 );
 
-type AssigneeValue = "" | typeof ASSIGNEE_EVERYONE | (typeof ADMIN_USER_LIST)[number];
+type AssigneeValue = string;
 
-const ASSIGNEE_OPTIONS: SelectOption<AssigneeValue>[] = [
-  { value: "", label: "Unassigned" },
-  {
-    value: ASSIGNEE_EVERYONE,
-    label: ASSIGNEE_EVERYONE,
-    hint: "Whole board",
-    dot: "#E8C97A",
-  },
-  ...ADMIN_USER_LIST.map<SelectOption<AssigneeValue>>((u) => ({
-    value: u,
-    label: u,
-    badge: u.charAt(0),
-  })),
-];
+function buildAssigneeOptions(
+  adminUsers: string[]
+): SelectOption<AssigneeValue>[] {
+  return [
+    { value: "", label: "Unassigned" },
+    {
+      value: ASSIGNEE_EVERYONE,
+      label: ASSIGNEE_EVERYONE,
+      hint: "Whole board",
+      dot: "#E8C97A",
+    },
+    ...adminUsers.map<SelectOption<AssigneeValue>>((u) => ({
+      value: u,
+      label: u,
+      badge: u.charAt(0),
+    })),
+  ];
+}
 
 interface Props {
   task: TaskWithChildren;
   depth: number;
   currentUser: string;
+  adminUsers: string[];
   onAddChild: (parent: Task, title: string) => void | Promise<void>;
   onUpdate: (id: string, patch: Partial<Task>) => void;
   onDelete: (id: string) => void;
@@ -88,10 +93,12 @@ export function TaskNode({
   task,
   depth,
   currentUser,
+  adminUsers,
   onAddChild,
   onUpdate,
   onDelete,
 }: Props) {
+  const assigneeOptions = buildAssigneeOptions(adminUsers);
   const [expanded, setExpanded] = useState(true);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -365,7 +372,7 @@ export function TaskNode({
           <BrandedSelect<AssigneeValue>
             ariaLabel="Assignee"
             value={(task.assignee as AssigneeValue) ?? ""}
-            options={ASSIGNEE_OPTIONS}
+            options={assigneeOptions}
             onChange={(v) => onUpdate(task.id, { assignee: v || null })}
             menuMinWidth={180}
             triggerStyle={{
@@ -440,6 +447,7 @@ export function TaskNode({
             task={task}
             draft={draft}
             setDraft={setDraft}
+            adminUsers={adminUsers}
             onClose={() => setDrawerOpen(false)}
             onSave={commitEdit}
             onUpdate={onUpdate}
@@ -478,6 +486,7 @@ export function TaskNode({
                   task={child}
                   depth={depth + 1}
                   currentUser={currentUser}
+                  adminUsers={adminUsers}
                   onAddChild={onAddChild}
                   onUpdate={onUpdate}
                   onDelete={onDelete}
@@ -612,6 +621,7 @@ function TaskEditDialog({
   task,
   draft,
   setDraft,
+  adminUsers,
   onClose,
   onSave,
   onUpdate,
@@ -622,6 +632,7 @@ function TaskEditDialog({
   setDraft: React.Dispatch<
     React.SetStateAction<{ title: string; description: string; due_date: string }>
   >;
+  adminUsers: string[];
   onClose: () => void;
   onSave: () => void;
   onUpdate: (id: string, patch: Partial<Task>) => void;
@@ -629,6 +640,7 @@ function TaskEditDialog({
 }) {
   const [confirming, setConfirming] = useState(false);
   const [armedDelete, setArmedDelete] = useState(false);
+  const assigneeOptions = buildAssigneeOptions(adminUsers);
 
   useEffect(() => {
     if (!confirming) {
@@ -780,7 +792,7 @@ function TaskEditDialog({
               Assignee
             </span>
             <div className="flex flex-wrap gap-2">
-              {ASSIGNEE_OPTIONS.map((opt) => {
+              {assigneeOptions.map((opt) => {
                 const active = (task.assignee ?? "") === opt.value;
                 return (
                   <button

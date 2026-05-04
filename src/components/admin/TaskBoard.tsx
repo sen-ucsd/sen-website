@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence } from "framer-motion";
 import { supabase } from "@/lib/supabase";
-import { ADMIN_USER_LIST, ASSIGNEE_EVERYONE } from "@/lib/admin-auth";
+import { ASSIGNEE_EVERYONE } from "@/lib/admin-auth";
 import { BusinessModelCanvas } from "./BusinessModelCanvas";
 import { TaskNode, sortByPriority } from "./TaskNode";
 import { InlineAddTask } from "./InlineAddTask";
@@ -42,41 +42,55 @@ const STATUS_FILTERS: { value: TaskStatus | "all"; label: string }[] = [
   { value: "blocked", label: "Blocked" },
 ];
 
-const ASSIGNEE_FILTER_OPTIONS: SelectOption<string>[] = [
-  { value: "all", label: "Anyone" },
-  {
-    value: ASSIGNEE_EVERYONE,
-    label: ASSIGNEE_EVERYONE,
-    hint: "Whole board",
-    dot: "#E8C97A",
-  },
-  ...ADMIN_USER_LIST.map<SelectOption<string>>((u) => ({
-    value: u,
-    label: u,
-    badge: u.charAt(0),
-  })),
-];
+function buildAssigneeFilterOptions(adminUsers: string[]): SelectOption<string>[] {
+  return [
+    { value: "all", label: "Anyone" },
+    {
+      value: ASSIGNEE_EVERYONE,
+      label: ASSIGNEE_EVERYONE,
+      hint: "Whole board",
+      dot: "#E8C97A",
+    },
+    ...adminUsers.map<SelectOption<string>>((u) => ({
+      value: u,
+      label: u,
+      badge: u.charAt(0),
+    })),
+  ];
+}
 
 export function TaskBoard({ currentUser }: { currentUser: string }) {
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [adminUsers, setAdminUsers] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<TaskStatus | "all">("all");
   const [assigneeFilter, setAssigneeFilter] = useState<string | "all">("all");
 
-  // Initial fetch + realtime subscribe
+  // Initial fetch + realtime subscribe. We load profiles too so the assignee
+  // picker reflects whoever's currently signed up to the chapter.
   useEffect(() => {
     let mounted = true;
     async function load() {
-      const { data, error: e } = await supabase
-        .from("tasks")
-        .select("*")
-        .eq("chapter_id", "san-diego")
-        .order("position", { ascending: true })
-        .order("created_at", { ascending: true });
+      const [{ data: taskData, error: tErr }, { data: profileData, error: pErr }] =
+        await Promise.all([
+          supabase
+            .from("tasks")
+            .select("*")
+            .eq("chapter_id", "san-diego")
+            .order("position", { ascending: true })
+            .order("created_at", { ascending: true }),
+          supabase
+            .from("profiles")
+            .select("display_name")
+            .eq("chapter_id", "san-diego")
+            .order("display_name", { ascending: true }),
+        ]);
       if (!mounted) return;
-      if (e) setError(e.message);
-      else setTasks(data ?? []);
+      if (tErr) setError(tErr.message);
+      else setTasks(taskData ?? []);
+      if (pErr) setError(pErr.message);
+      else setAdminUsers((profileData ?? []).map((p) => p.display_name));
       setLoading(false);
     }
     load();
@@ -345,7 +359,7 @@ export function TaskBoard({ currentUser }: { currentUser: string }) {
           <BrandedSelect
             ariaLabel="Filter by assignee"
             value={assigneeFilter}
-            options={ASSIGNEE_FILTER_OPTIONS}
+            options={buildAssigneeFilterOptions(adminUsers)}
             onChange={(v) => setAssigneeFilter(v)}
             menuMinWidth={180}
           />
@@ -379,6 +393,7 @@ export function TaskBoard({ currentUser }: { currentUser: string }) {
                   task={t}
                   depth={0}
                   currentUser={currentUser}
+                  adminUsers={adminUsers}
                   onAddChild={(parent, title) => addTask(parent.id, title)}
                   onUpdate={updateTask}
                   onDelete={deleteTask}

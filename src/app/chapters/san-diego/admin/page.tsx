@@ -6,8 +6,9 @@ export const dynamic = "force-dynamic";
 export const metadata = { title: "Board Portal · San Diego · SEN" };
 
 export default async function AdminDashboard() {
-  const user = await getCurrentAdmin();
-  const initial = (user ?? "?").charAt(0).toUpperCase();
+  const admin = await getCurrentAdmin();
+  const displayName = admin?.displayName ?? "Unknown";
+  const initial = displayName.charAt(0).toUpperCase();
 
   return (
     <main className="min-h-screen pb-24 md:pb-32" style={{ background: "#050816" }}>
@@ -46,7 +47,7 @@ export default async function AdminDashboard() {
             style={{ color: "rgba(240, 236, 228, 0.55)" }}
           >
             Signed in as{" "}
-            <strong style={{ color: "#E8C97A", fontWeight: 500 }}>{user}</strong>
+            <strong style={{ color: "#E8C97A", fontWeight: 500 }}>{displayName}</strong>
           </span>
           <span
             className="md:hidden inline-flex items-center justify-center w-8 h-8 rounded-full text-[12px]"
@@ -57,7 +58,7 @@ export default async function AdminDashboard() {
               fontFamily: "var(--font-newsreader)",
               fontWeight: 600,
             }}
-            aria-label={`Signed in as ${user}`}
+            aria-label={`Signed in as ${displayName}`}
           >
             {initial}
           </span>
@@ -99,7 +100,7 @@ export default async function AdminDashboard() {
           </p>
         </div>
 
-        <TaskBoard currentUser={user ?? "Unknown"} />
+        <TaskBoard currentUser={displayName} />
       </div>
     </main>
   );

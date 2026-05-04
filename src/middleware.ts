@@ -1,34 +1,66 @@
-import { NextResponse } from "next/server";
-import type { NextRequest } from "next/server";
-import { ADMIN_COOKIE_NAME } from "@/lib/admin-auth";
+import { NextResponse, type NextRequest } from "next/server";
+import { createServerClient } from "@supabase/ssr";
 
 const ADMIN_BASE = "/chapters/san-diego/admin";
 const LOGIN_PATH = `${ADMIN_BASE}/login`;
+const SIGNUP_PATH = `${ADMIN_BASE}/signup`;
+const FORGOT_PATH = `${ADMIN_BASE}/forgot`;
+const RESET_PATH = `${ADMIN_BASE}/reset`;
 
-export function middleware(req: NextRequest) {
-  const path = req.nextUrl.pathname;
+const PUBLIC_AUTH_PATHS = new Set<string>([
+  LOGIN_PATH,
+  SIGNUP_PATH,
+  FORGOT_PATH,
+  RESET_PATH,
+]);
 
-  // Only guard pages under the admin namespace
+const url = (process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").trim();
+const anon = (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "").trim();
+
+export async function middleware(request: NextRequest) {
+  const path = request.nextUrl.pathname;
+
+  // Cheap exit for anything outside the admin namespace.
   if (!path.startsWith(ADMIN_BASE)) return NextResponse.next();
 
-  const isLoggedIn = !!req.cookies.get(ADMIN_COOKIE_NAME)?.value;
+  let supabaseResponse = NextResponse.next({ request });
 
-  // Already on /login: if logged in, bounce to dashboard
-  if (path === LOGIN_PATH) {
-    if (isLoggedIn) {
-      return NextResponse.redirect(new URL(ADMIN_BASE, req.url));
-    }
-    return NextResponse.next();
+  const supabase = createServerClient(url, anon, {
+    cookies: {
+      getAll() {
+        return request.cookies.getAll();
+      },
+      setAll(cookiesToSet) {
+        cookiesToSet.forEach(({ name, value }) =>
+          request.cookies.set(name, value)
+        );
+        supabaseResponse = NextResponse.next({ request });
+        cookiesToSet.forEach(({ name, value, options }) =>
+          supabaseResponse.cookies.set(name, value, options)
+        );
+      },
+    },
+  });
+
+  // IMPORTANT: getUser() must run between the createServerClient call and
+  // returning the response, so refreshed session cookies make it back.
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const onAuthPage = PUBLIC_AUTH_PATHS.has(path);
+
+  if (user && onAuthPage) {
+    return NextResponse.redirect(new URL(ADMIN_BASE, request.url));
   }
 
-  // Any other admin route: require login
-  if (!isLoggedIn) {
-    const url = new URL(LOGIN_PATH, req.url);
-    url.searchParams.set("from", path);
-    return NextResponse.redirect(url);
+  if (!user && !onAuthPage) {
+    const redirect = new URL(LOGIN_PATH, request.url);
+    if (path !== ADMIN_BASE) redirect.searchParams.set("from", path);
+    return NextResponse.redirect(redirect);
   }
 
-  return NextResponse.next();
+  return supabaseResponse;
 }
 
 export const config = {
