@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence } from "framer-motion";
-import { supabase } from "@/lib/supabase";
+import { getSupabaseBrowser } from "@/lib/supabase-browser";
 import { ASSIGNEE_EVERYONE } from "@/lib/admin-auth";
 import { BusinessModelCanvas } from "./BusinessModelCanvas";
 import { TaskNode, sortByPriority } from "./TaskNode";
@@ -67,6 +67,8 @@ export function TaskBoard({ currentUser }: { currentUser: string }) {
   const [statusFilter, setStatusFilter] = useState<TaskStatus | "all">("all");
   const [assigneeFilter, setAssigneeFilter] = useState<string | "all">("all");
 
+  const supabase = getSupabaseBrowser();
+
   // Initial fetch + realtime subscribe. We load profiles too so the assignee
   // picker reflects whoever's currently signed up to the chapter.
   useEffect(() => {
@@ -90,7 +92,10 @@ export function TaskBoard({ currentUser }: { currentUser: string }) {
       if (tErr) setError(tErr.message);
       else setTasks(taskData ?? []);
       if (pErr) setError(pErr.message);
-      else setAdminUsers((profileData ?? []).map((p) => p.display_name));
+      else
+        setAdminUsers(
+          (profileData ?? []).map((p: { display_name: string }) => p.display_name)
+        );
       setLoading(false);
     }
     load();
