@@ -1,10 +1,11 @@
 "use client";
 
 import { motion } from "framer-motion";
+import { useState } from "react";
 
 type Sub = { label: string; items: string[] };
 type Section = {
-  number: number;
+  number: string;
   label: string;
   items: string[];
   sub?: Sub;
@@ -13,7 +14,7 @@ type Section = {
 // SEN's lean canvas, transcribed from the whiteboard. Edit here to update the
 // admin display. (Future iteration: persist + edit inline from the admin UI.)
 const PROBLEM: Section = {
-  number: 1,
+  number: "01",
   label: "Problem",
   items: [
     "Lack of a centralized hub for founders & talent",
@@ -21,18 +22,18 @@ const PROBLEM: Section = {
   ],
   sub: {
     label: "Existing alternatives",
-    items: ["4C", "SIC", "AIG-Z"],
+    items: ["YC", "SIC", "AIG-Z"],
   },
 };
 
 const CUSTOMER_SEGMENTS: Section = {
-  number: 2,
+  number: "02",
   label: "Customer Segments",
   items: ["Existing & high-potential founders"],
   sub: {
-    label: "High value add",
+    label: "Hike value add",
     items: [
-      "Clear year [?]",
+      "Clear your mind",
       "Workout",
       "Network",
       "Find partners",
@@ -42,7 +43,7 @@ const CUSTOMER_SEGMENTS: Section = {
 };
 
 const UVP: Section = {
-  number: 3,
+  number: "03",
   label: "Unique Value Proposition",
   items: [
     "Skool",
@@ -50,27 +51,29 @@ const UVP: Section = {
     "Alumni network",
     "National breadth",
     "Internal connections when convenient",
-    "Connect to outside [?]",
+    "Connect to outside events",
   ],
 };
 
 const SOLUTION: Section = {
-  number: 4,
+  number: "04",
   label: "Solution",
-  items: ["Centralized web of potential curriculum & development"],
+  items: ["Centralized web of potential curation & development"],
 };
 
 const CHANNELS: Section = {
-  number: 5,
+  number: "05",
   label: "Channels",
   items: [
     "Business Club",
     "Black Business Association",
     "Business Council",
-    "UC Entrepreneur Network [?]",
+    "UC Entrepreneur Network",
     "Product Management at UCSD",
-    "Asians at UCSD",
-    "Liquid Death [?]",
+    "Ascent at UCSD",
+    "Redbull",
+    "Liquid Death",
+    "Triton Consulting Group (TCG)",
     "Women in Business",
     "Minority Business Association",
     "Associated Students",
@@ -79,56 +82,55 @@ const CHANNELS: Section = {
 };
 
 const FUNDING: Section = {
-  number: 6,
+  number: "06",
   label: "Funding & Budgeting",
-  items: [
-    "Tim",
-    "Associate Chancellor",
-    "A.S.",
-    "[?]",
-  ],
-};
-
-const COST: Section = {
-  // Cost is folded into Funding above — left here as a placeholder if you
-  // ever want to split the bottom row into Cost vs Revenue cleanly.
-  number: 7,
-  label: "Cost Structure",
-  items: [],
+  items: ["Tim", "Associate Chancellor", "A.S.", "BRAIN funding"],
 };
 
 const KEY_METRICS: Section = {
-  number: 8,
+  number: "08",
   label: "Key Metrics",
   items: ["Interactions (Skool)", "Attendance"],
 };
 
 const UNFAIR_ADVANTAGE: Section = {
-  number: 9,
+  number: "09",
   label: "Unfair Advantage",
   items: [
-    "Proof of concept by proxy",
-    "Experience",
+    "Proof of concept by proxy of leadership experience",
     "Comprehensive network",
   ],
 };
 
 const PARTNERS: Section = {
-  number: 10,
+  number: "10",
   label: "Partners",
-  items: ["The Basement", "Sullivan Center [?]"],
+  items: ["The Basement", "Sullivan Center (at Rady)"],
 };
 
-void COST;
-
-// Lean Canvas grid — 5 cols x 3 rows on desktop, single column stack on mobile.
-//   row 1: PROBLEM  | SOLUTION | UVP    | UNFAIR  | CUSTOMERS
-//   row 2: PROBLEM  | METRICS  | UVP    | CHANNELS| CUSTOMERS    (Problem, UVP, Customers span both rows)
-//   row 3: FUNDING (cols 1-3)            | PARTNERS (cols 4-5)
+// Strategy canvas — 3 x 3 grid on desktop, stacked on mobile. Standard Lean
+// Canvas uses an L-shape with row-spans; that breaks down hard when one
+// section (Channels here, with 13 partners) is much denser than its
+// neighbours, so we use a uniform grid and let the long lists flow into
+// CSS columns inside their own card. Sub-sections (existing alternatives,
+// hike value add) ride along inside their parent card.
 //
-// Problem, UVP, and Customer Segments are tall cards that hold a sub-section
-// in their lower half (existing alts / high-level concept / early adopters
-// in classic Lean Canvas; SEN's variant only fills two of those subs).
+//   row 1: PROBLEM   | SOLUTION  | UVP
+//   row 2: CUSTOMERS | CHANNELS  | UNFAIR ADVANTAGE
+//   row 3: METRICS   | FUNDING   | PARTNERS
+const SECTIONS: Section[] = [
+  PROBLEM,
+  SOLUTION,
+  UVP,
+  CUSTOMER_SEGMENTS,
+  CHANNELS,
+  UNFAIR_ADVANTAGE,
+  KEY_METRICS,
+  FUNDING,
+  PARTNERS,
+];
+const HIGHLIGHT_INDEX = 2; // UVP
+
 export function BusinessModelCanvas() {
   return (
     <motion.div
@@ -193,46 +195,15 @@ export function BusinessModelCanvas() {
           below in the WBS ladders up to these nine boxes.
         </p>
 
-        {/* Desktop: lean canvas grid. Mobile: vertical stack. */}
-        <div className="mt-6 md:mt-8 hidden lg:grid lg:gap-2 lg:grid-cols-5 lg:grid-rows-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,auto)]">
-          {/* Row 1 + 2 */}
-          <Card
-            section={PROBLEM}
-            className="lg:col-start-1 lg:row-span-2"
-          />
-          <Card section={SOLUTION} className="lg:col-start-2 lg:row-start-1" />
-          <Card section={UVP} className="lg:col-start-3 lg:row-span-2" />
-          <Card
-            section={UNFAIR_ADVANTAGE}
-            className="lg:col-start-4 lg:row-start-1"
-          />
-          <Card
-            section={CUSTOMER_SEGMENTS}
-            className="lg:col-start-5 lg:row-span-2"
-          />
-          <Card section={KEY_METRICS} className="lg:col-start-2 lg:row-start-2" />
-          <Card section={CHANNELS} className="lg:col-start-4 lg:row-start-2" />
-          {/* Row 3 */}
-          <Card
-            section={FUNDING}
-            className="lg:col-start-1 lg:col-span-3 lg:row-start-3"
-          />
-          <Card
-            section={PARTNERS}
-            className="lg:col-start-4 lg:col-span-2 lg:row-start-3"
-          />
-        </div>
-
-        <div className="mt-6 md:mt-8 grid grid-cols-1 sm:grid-cols-2 gap-2 lg:hidden">
-          <Card section={PROBLEM} />
-          <Card section={SOLUTION} />
-          <Card section={UVP} />
-          <Card section={UNFAIR_ADVANTAGE} />
-          <Card section={CUSTOMER_SEGMENTS} />
-          <Card section={KEY_METRICS} />
-          <Card section={CHANNELS} />
-          <Card section={FUNDING} />
-          <Card section={PARTNERS} />
+        <div className="mt-6 md:mt-8 grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+          {SECTIONS.map((section, i) => (
+            <Card
+              key={section.number}
+              section={section}
+              index={i}
+              highlight={i === HIGHLIGHT_INDEX}
+            />
+          ))}
         </div>
       </div>
     </motion.div>
@@ -241,63 +212,102 @@ export function BusinessModelCanvas() {
 
 function Card({
   section,
+  index,
+  highlight,
   className,
 }: {
   section: Section;
+  index: number;
+  highlight?: boolean;
   className?: string;
 }) {
+  const [hovered, setHovered] = useState(false);
+
+  const baseBg = highlight
+    ? "rgba(212, 168, 67, 0.06)"
+    : "rgba(5, 8, 22, 0.55)";
+  const baseBorder = highlight
+    ? "rgba(212, 168, 67, 0.32)"
+    : "rgba(30, 42, 69, 1)";
+  const hoverBorder = "rgba(212, 168, 67, 0.55)";
+
   return (
-    <div
-      className={`relative rounded-lg p-3.5 md:p-4 flex flex-col gap-3 ${
-        className ?? ""
-      }`}
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{
+        duration: 0.5,
+        delay: 0.06 * index + 0.15,
+        ease: [0.16, 1, 0.3, 1],
+      }}
+      whileHover={{ y: -2 }}
+      onPointerEnter={() => setHovered(true)}
+      onPointerLeave={() => setHovered(false)}
+      className={`relative rounded-xl flex flex-col h-full ${className ?? ""}`}
       style={{
-        background: "rgba(5, 8, 22, 0.45)",
-        border: "1px solid rgba(30, 42, 69, 1)",
-        minHeight: 160,
+        background: baseBg,
+        border: `1px solid ${hovered ? hoverBorder : baseBorder}`,
+        boxShadow: hovered
+          ? "0 8px 32px rgba(0,0,0,0.4), 0 0 0 1px rgba(212,168,67,0.18) inset, 0 0 24px rgba(212,168,67,0.08)"
+          : "0 0 0 1px rgba(212,168,67,0.04) inset",
+        transition:
+          "border-color 220ms ease, box-shadow 220ms ease, background 220ms ease",
       }}
     >
-      <div className="flex items-center gap-2">
-        <span
-          aria-hidden
-          className="inline-flex items-center justify-center w-5 h-5 rounded-full text-[10px] shrink-0"
-          style={{
-            background: "rgba(212, 168, 67, 0.14)",
-            color: "#E8C97A",
-            fontFamily: "var(--font-newsreader)",
-            fontWeight: 600,
-            fontStyle: "italic",
-          }}
-        >
-          {section.number}
-        </span>
-        <span
-          className="text-eyebrow"
-          style={{ color: "rgba(232, 201, 122, 0.78)" }}
-        >
-          {section.label}
-        </span>
-      </div>
+      {/* Numbered marginalia */}
+      <span
+        aria-hidden
+        className="absolute top-3 right-3 text-[10px] tracking-[0.18em] tabular-nums"
+        style={{
+          color: hovered
+            ? "rgba(232, 201, 122, 0.85)"
+            : "rgba(232, 201, 122, 0.32)",
+          fontFamily: "var(--font-newsreader)",
+          fontStyle: "italic",
+          transition: "color 220ms ease",
+        }}
+      >
+        {section.number}
+      </span>
 
-      <ItemList items={section.items} />
-
-      {section.sub && (
-        <div
-          className="mt-auto pt-3"
-          style={{
-            borderTop: "1px dashed rgba(212, 168, 67, 0.2)",
-          }}
-        >
-          <div
-            className="text-[10px] tracking-[0.18em] uppercase mb-2"
-            style={{ color: "rgba(232, 201, 122, 0.55)" }}
+      <div className="flex flex-col h-full p-4 md:p-[18px] gap-3">
+        <div className="flex items-center gap-2 pr-8">
+          <span
+            aria-hidden
+            className="inline-block w-1 h-3.5"
+            style={{
+              background:
+                "linear-gradient(to bottom, rgba(232,201,122,0.85) 0%, rgba(160,124,46,0.25) 100%)",
+            }}
+          />
+          <span
+            className="text-eyebrow"
+            style={{ color: "rgba(232, 201, 122, 0.82)" }}
           >
-            {section.sub.label}
-          </div>
-          <ItemList items={section.sub.items} muted />
+            {section.label}
+          </span>
         </div>
-      )}
-    </div>
+
+        <ItemList items={section.items} />
+
+        {section.sub && (
+          <div
+            className="mt-auto pt-3"
+            style={{
+              borderTop: "1px dashed rgba(212, 168, 67, 0.22)",
+            }}
+          >
+            <div
+              className="text-[10px] tracking-[0.18em] uppercase mb-2"
+              style={{ color: "rgba(232, 201, 122, 0.6)" }}
+            >
+              {section.sub.label}
+            </div>
+            <ItemList items={section.sub.items} muted />
+          </div>
+        )}
+      </div>
+    </motion.div>
   );
 }
 
@@ -312,6 +322,31 @@ function ItemList({ items, muted }: { items: string[]; muted?: boolean }) {
       </p>
     );
   }
+  // Long lists (Channels: 13 partner orgs) read better as wrapping pills
+  // than as a bullet column — they're discrete entities, not action items,
+  // and the pill layout keeps the card from inflating its row.
+  if (items.length > 6) {
+    return (
+      <ul className="flex flex-wrap gap-1.5">
+        {items.map((item, i) => (
+          <li
+            key={i}
+            className="text-[11.5px] leading-[1.2] rounded-full px-2.5 py-[5px]"
+            style={{
+              background: "rgba(212, 168, 67, 0.07)",
+              border: "1px solid rgba(212, 168, 67, 0.22)",
+              color: muted
+                ? "rgba(240, 236, 228, 0.65)"
+                : "rgba(240, 236, 228, 0.88)",
+              fontFamily: "var(--font-manrope)",
+            }}
+          >
+            {item}
+          </li>
+        ))}
+      </ul>
+    );
+  }
   return (
     <ul className="space-y-1.5">
       {items.map((item, i) => (
@@ -320,8 +355,8 @@ function ItemList({ items, muted }: { items: string[]; muted?: boolean }) {
           className="flex gap-2 text-[12.5px] md:text-[13px] leading-[1.45]"
           style={{
             color: muted
-              ? "rgba(240, 236, 228, 0.55)"
-              : "rgba(240, 236, 228, 0.82)",
+              ? "rgba(240, 236, 228, 0.58)"
+              : "rgba(240, 236, 228, 0.85)",
             fontFamily: "var(--font-manrope)",
           }}
         >
@@ -332,7 +367,7 @@ function ItemList({ items, muted }: { items: string[]; muted?: boolean }) {
               width: 4,
               height: 4,
               borderRadius: 9999,
-              background: "rgba(212, 168, 67, 0.55)",
+              background: "rgba(212, 168, 67, 0.6)",
             }}
           />
           <span>{item}</span>

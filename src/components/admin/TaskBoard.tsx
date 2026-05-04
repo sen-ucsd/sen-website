@@ -222,16 +222,24 @@ export function TaskBoard({ currentUser }: { currentUser: string }) {
 
   if (loading) {
     return (
-      <div
-        className="rounded-2xl p-12 text-center"
-        style={{
-          background: "rgba(20, 27, 45, 0.4)",
-          border: "1px solid rgba(30, 42, 69, 1)",
-        }}
-      >
-        <p className="text-[14px]" style={{ color: "rgba(240, 236, 228, 0.5)" }}>
-          Loading the network…
-        </p>
+      <div className="space-y-8 md:space-y-12">
+        {/* The strategy canvas is static content, so it can render
+            immediately while task data is still in flight. */}
+        <BusinessModelCanvas />
+        <div
+          className="rounded-2xl p-12 text-center"
+          style={{
+            background: "rgba(20, 27, 45, 0.4)",
+            border: "1px solid rgba(30, 42, 69, 1)",
+          }}
+        >
+          <p
+            className="text-[14px]"
+            style={{ color: "rgba(240, 236, 228, 0.5)" }}
+          >
+            Loading the network…
+          </p>
+        </div>
       </div>
     );
   }
