@@ -90,6 +90,8 @@ export function Hero() {
               <div className="grid lg:grid-cols-12 gap-12 lg:gap-16 items-center">
                 {/* Left column: text */}
                 <div className="lg:col-span-7 pointer-events-auto">
+                  <WorkshopRibbon />
+
                   <motion.span
                     className="text-eyebrow block mb-7"
                     style={{ color: "rgba(232, 201, 122, 0.85)" }}
@@ -234,6 +236,73 @@ export function Hero() {
         onClose={() => setExplorerOpen(false)}
       />
     </>
+  );
+}
+
+function WorkshopRibbon() {
+  // Above-the-fold announcement strip for the Claude workshop.
+  // Compact on mobile (just the dot + one-line copy + arrow) so it never
+  // wraps inside the pill; full chrome (eyebrow + divider) returns on sm+.
+  return (
+    <motion.a
+      href="/workshops/claude"
+      className="group inline-flex max-w-full items-center gap-2 sm:gap-3 mb-8 rounded-full pl-2.5 sm:pl-3 pr-3 sm:pr-4 py-1.5 sm:py-2"
+      style={{
+        background: "rgba(212, 168, 67, 0.08)",
+        border: "1px solid rgba(212, 168, 67, 0.35)",
+        backdropFilter: "blur(6px)",
+        WebkitBackdropFilter: "blur(6px)",
+      }}
+      initial={{ opacity: 0, y: -6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.7, delay: 0.85 }}
+      whileHover={{
+        background: "rgba(212, 168, 67, 0.14)",
+        borderColor: "rgba(232, 201, 122, 0.55)",
+      }}
+    >
+      <span
+        aria-hidden
+        className="inline-flex items-center justify-center w-4 h-4 sm:w-5 sm:h-5 rounded-full shrink-0"
+        style={{
+          background: "rgba(232, 201, 122, 0.18)",
+        }}
+      >
+        <span
+          aria-hidden
+          className="inline-block w-1.5 h-1.5 rounded-full"
+          style={{
+            background: "#E8C97A",
+            boxShadow: "0 0 8px rgba(232, 201, 122, 0.85)",
+            animation: "dot-pulse-strong 2.4s ease-in-out infinite",
+          }}
+        />
+      </span>
+      <span
+        className="text-eyebrow hidden sm:inline"
+        style={{ color: "#E8C97A" }}
+      >
+        This week
+      </span>
+      <span
+        aria-hidden
+        className="hidden sm:inline h-3 w-px"
+        style={{ background: "rgba(232, 201, 122, 0.35)" }}
+      />
+      <span
+        className="font-display text-[12px] sm:text-[14px] tracking-wide whitespace-nowrap"
+        style={{ color: "#F0ECE4", fontWeight: 500 }}
+      >
+        <span className="sm:hidden">Claude Workshop · Tue, May 19</span>
+        <span className="hidden sm:inline">Build with Claude · Tue May 19, 4 PM</span>
+      </span>
+      <span
+        aria-hidden
+        className="text-[rgba(232,201,122,0.85)] transition-transform duration-300 group-hover:translate-x-1 shrink-0"
+      >
+        →
+      </span>
+    </motion.a>
   );
 }
 
